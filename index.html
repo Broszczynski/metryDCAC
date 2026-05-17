@@ -1,0 +1,199 @@
+/**
+ * Obsługa żądań GET (Dystrybucja konfiguracji projektu i pomiarów do aplikacji)
+ */
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // --- 1. ODCZYT KONFIGURACJI ---
+    var configSheet = ss.getSheetByName("Konfiguracja");
+    var configData = {
+      globalWorkMode: "drums",
+      stringsCountPerInverter: 12,
+      teams: [
+        { id: "team-1", name: "Team 1" },
+        { id: "team-2", name: "Team 2" },
+        { id: "team-3", name: "Team 3" }
+      ],
+      trafos: [
+        { id: "trafo-1", trafoNo: 1, inverterCount: 12 },
+        { id: "trafo-2", trafoNo: 2, inverterCount: 8 }
+      ]
+    };
+
+    if (configSheet) {
+      // Pobieranie wartości trybu pracy i stringów
+      var modeVal = configSheet.getRange("B1").getValue();
+      if (modeVal) configData.globalWorkMode = modeVal.toString().toLowerCase() === "stringi" ? "strings" : "drums";
+      
+      var stringsVal = parseInt(configSheet.getRange("B2").getValue());
+      if (!isNaN(stringsVal)) configData.stringsCountPerInverter = stringsVal;
+
+      // Pobieranie Zespołów (Kolumny D-E)
+      var teamRows = configSheet.getRange("D2:E" + configSheet.getLastRow()).getValues();
+      var parsedTeams = [];
+      for (var i = 0; i < teamRows.length; i++) {
+        if (teamRows[i][0] && teamRows[i][1]) {
+          parsedTeams.push({ id: teamRows[i][0].toString(), name: teamRows[i][1].toString() });
+        }
+      }
+      if (parsedTeams.length > 0) configData.teams = parsedTeams;
+
+      // Pobieranie Trafostacji (Kolumny G-I)
+      var trafoRows = configSheet.getRange("G2:I" + configSheet.getLastRow()).getValues();
+      var parsedTrafos = [];
+      for (var j = 0; j < trafoRows.length; j++) {
+        if (trafoRows[j][0] && trafoRows[j][1]) {
+          parsedTrafos.push({
+            id: trafoRows[j][0].toString(),
+            trafoNo: parseInt(trafoRows[j][1]),
+            inverterCount: parseInt(trafoRows[j][2] || 10)
+          });
+        }
+      }
+      if (parsedTrafos.length > 0) configData.trafos = parsedTrafos;
+    } else {
+      // Inicjalizacja domyślnego arkusza konfiguracyjnego jeśli go brak
+      configSheet = ss.insertSheet("Konfiguracja");
+      configSheet.getRange("A1:B2").setValues([
+        ["Tryb pracy (Bębny / Stringi)", "Bębny"],
+        ["Stringów na falownik (WR)", 12]
+      ]);
+      
+      configSheet.getRange("D1:E4").setValues([
+        ["ID Zespołu", "Nazwa Zespołu", "", ""],
+        ["team-1", "Team 1", "", ""],
+        ["team-2", "Team 2", "", ""],
+        ["team-3", "Team 3", "", ""]
+      ]);
+
+      configSheet.getRange("G1:I3").setValues([
+        ["ID Trafostacji", "Nr Trafostacji", "Ilość Falowników"],
+        ["trafo-1", 1, 12],
+        ["trafo-2", 2, 8]
+      ]);
+
+      var headerRange = configSheet.getRange("A1:I1");
+      headerRange.setFontWeight("bold");
+      headerRange.setBackground("#a3e635");
+      headerRange.setFontColor("#09090b");
+    }
+
+    // --- 2. ODCZYT WPISÓW ROBOCZYCH ---
+    var mainSheet = ss.getSheetByName("Pomiary") || ss.getActiveSheet();
+    if (mainSheet.getName() === "Konfiguracja") {
+      mainSheet = ss.getSheetByName("Pomiary") || ss.insertSheet("Pomiary");
+    }
+
+    var records = [];
+    if (mainSheet.getLastRow() > 1) {
+      var recordValues = mainSheet.getRange(2, 1, mainSheet.getLastRow() - 1, 12).getValues();
+      for (var k = 0; k < recordValues.length; k++) {
+        records.push({
+          id: recordValues[k][0],
+          timestamp: recordValues[k][1],
+          team: recordValues[k][2],
+          workMode: recordValues[k][3],
+          trafoNo: recordValues[k][4],
+          inverter: recordValues[k][5],
+          identifier: recordValues[k][6],
+          totalLength: recordValues[k][7],
+          startMeter: recordValues[k][8],
+          endMeter: recordValues[k][9],
+          used: recordValues[k][10],
+          remaining: recordValues[k][11]
+        });
+      }
+    }
+
+    var response = {
+      status: "success",
+      config: configData,
+      records: records
+    };
+
+    return ContentService.createTextOutput(JSON.stringify(response))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+  }
+}
+
+/**
+ * Obsługa żądań POST (Odbiór i nadpisywanie duplikatów)
+ */
+function doPost(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Pomiary");
+    if (!sheet) {
+      sheet = ss.insertSheet("Pomiary");
+    }
+    
+    var jsonString = e.postData.contents;
+    var data = JSON.parse(jsonString);
+    
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "ID Pomiaru", "Data zapisu", "Team (Zespół)", "Tryb pracy", "Trafostacja", "Falownik (WR)", "Identyfikator (Bęben/String)", "Długość bębna (m)", "Metry początkowe", "Metry końcowe", "Zużyte metry (m)", "Pozostało na bębnie (m)"
+      ]);
+      
+      var headerRange = sheet.getRange(1, 1, 1, 12);
+      headerRange.setFontWeight("bold");
+      headerRange.setBackground("#a3e635");
+      headerRange.setFontColor("#09090b");
+      headerRange.setHorizontalAlignment("center");
+      sheet.setFrozenRows(1);
+    }
+    
+    // Anty-dublowanie na podstawie ID Pomiaru (Kolumna A)
+    var dataRange = sheet.getDataRange();
+    var values = dataRange.getValues();
+    var idToFind = data.id || "";
+    var rowToUpdate = -1;
+    
+    if (idToFind !== "") {
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0] === idToFind) { 
+          rowToUpdate = i + 1;
+          break;
+        }
+      }
+    }
+    
+    var recordData = [
+      data.id || "",
+      data.timestamp || new Date().toLocaleString("pl-PL"),
+      data.team || "",
+      data.workMode || "",
+      data.trafoNo || "",
+      data.inverter || "",
+      data.identifier || "",
+      data.totalLength || 0,
+      data.startMeter || 0,
+      data.endMeter || 0,
+      data.used || 0,
+      data.remaining || 0
+    ];
+    
+    if (rowToUpdate !== -1) {
+      var targetRange = sheet.getRange(rowToUpdate, 1, 1, 12);
+      targetRange.setValues([recordData]);
+    } else {
+      sheet.appendRow(recordData);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+      
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+  }
+}
