@@ -315,16 +315,14 @@
             const zapiszFormularz = async () => {
                 let zaktualizowaneWpisy = [];
 
-                if (aktywnaZakladka === 'dc' && konfig.trybPracy === 'Stringi') {
-                    zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
-                        return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
-                    });
-                } else if (aktywnaZakladka === 'ac') {
-                    zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
-                        return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
-                    });
-                } else {
-                    zaktualizowaneWpisy = [...formularzWpisow];
+                // FILTRACJA: Pomijamy wiersze, które nie mają wprowadzonych pomiarów (zużycie = 0 i odczyty = 0) we wszystkich trybach
+                zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
+                    return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
+                });
+
+                if (zaktualizowaneWpisy.length === 0) {
+                    pokazPowiadomienie("Brak danych do zapisu. Wpisz odczyty Start i Koniec przed zapisem.", "warning");
+                    return;
                 }
 
                 const sformatowane = zaktualizowaneWpisy.map(function(w) {
@@ -485,7 +483,7 @@
                 }
             };
 
-            // --- METODA GET: POBRANIE NAJNOWSZYCH DANYCH Z GOOGLE SHEETS (Z CACHE-BUSTINGIEM) ---
+            // --- METODA GET: POBRANIE NAJNOWSZYCH DANYCH Z GOOGLE SHEETS (Z CACHE-BUSTINGIEM I PARSEREM TEKSTOWYM) ---
             const pobierzZGoogleSheets = async (cichyImport) => {
                 if (!sheetWebhookUrl) {
                     if (!cichyImport) {
@@ -498,16 +496,32 @@
                 setStatusSynchronizacji('Pobieranie...');
                 
                 try {
-                    // DODANIE UNIKALNEGO PARAMETRU CZASU, ABY OMINĄĆ AGRESYWNE BUFOROWANIE GOOGLE PRZEKIEROWAŃ
+                    // DODANIE UNIKALNEGO PARAMETRU CZASU, ABY OMINĄĆ AGRESYWNE BUFOROWANIE PRZEKIEROWAŃ GOOGLE
                     const urlZCacheBusterem = sheetWebhookUrl + (sheetWebhookUrl.indexOf('?') !== -1 ? '&' : '?') + 'action=get_all_data&_t=' + Date.now();
                     
                     const response = await fetch(urlZCacheBusterem);
-                    const dane = await response.json();
+                    if (!response.ok) {
+                        throw new Error("HTTP Status " + response.status);
+                    }
+                    
+                    // ODBIERANIE ODPOWIEDZI JAKO TEKST, COBY UNIKNĄĆ BŁĘDÓW CORS DLA MIME JSON
+                    const rawText = await response.text();
+                    
+                    if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
+                        throw new Error("Google Apps Script zwrócił błąd HTML zamiast danych. Prawdopodobnie skrypt nie został wdrożony dla opcji 'Każdy' (Anyone)!");
+                    }
+                    
+                    let dane;
+                    try {
+                        dane = JSON.parse(rawText);
+                    } catch(e) {
+                        throw new Error("Nieprawidłowy format JSON ze skryptu Apps Script.");
+                    }
                     
                     if (dane && dane.konfiguracja) {
                         // 1. Dopasowanie i normalizacja Trybu Pracy (Bębny vs Stringi)
                         const trybRaw = dane.konfiguracja.trybPracy || 'Bębny';
-                        const trybPracyNormalized = (trybRaw.toLowerCase().indexOf('bęb') !== -1 || trybRaw.toLowerCase().indexOf('beb') !== -1) ? 'Bębny' : 'Stringi';
+                        const trybPracyNormalized = (String(trybRaw).toLowerCase().indexOf('bęb') !== -1 || String(trybRaw).toLowerCase().indexOf('beb') !== -1) ? 'Bębny' : 'Stringi';
                         
                         const nowaKonfiguracja = {
                             trybPracy: trybPracyNormalized,
@@ -570,7 +584,7 @@
                     setCzyTrwaSync(false);
                     setStatusSynchronizacji('Błąd synchronizacji');
                     if (!cichyImport) {
-                        pokazPowiadomienie("Błąd połączenia. Upewnij się, że link Apps Script jest prawidłowy i wdrożony jako 'Każdy'.", "error");
+                        pokazPowiadomienie(err.message || "Błąd połączenia z Arkuszem Google.", "error");
                     }
                 }
             };
@@ -727,114 +741,179 @@
                                                     className="w-full h-36 bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-[9px] text-neutral-300 font-mono focus:outline-none"
                                                     value={`function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetConfig = ss.getSheetByName("Konfiguracja");
-  if (!sheetConfig) {
-    return ContentService.createTextOutput(JSON.stringify({ error: "Brak zakladki Konfiguracja" })).setMimeType(ContentService.MimeType.JSON);
+  var sheets = ss.getSheets();
+  var sheetConfig = null;
+  
+  // Szukanie bezpieczne, niewrazliwe na wielkosc liter i spacje
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName().toLowerCase().replace(/\\s/g, "");
+    if (name === "konfiguracja") {
+      sheetConfig = sheets[i];
+      break;
+    }
   }
+  
+  if (!sheetConfig) {
+    return ContentService.createTextOutput(JSON.stringify({ error: "Brak zakladki Konfiguracja" })).setMimeType(ContentService.MimeType.TEXT);
+  }
+  
   var trybPracy = sheetConfig.getRange("B1").getValue() || "Bębny";
   var iloscTeamow = sheetConfig.getRange("B2").getValue() || 2;
   var trafos = [];
   var lastRowConfig = sheetConfig.getLastRow();
+  
   for (var i = 5; i <= lastRowConfig; i++) {
     var trafoId = sheetConfig.getRange(i, 1).getValue();
     var falowniki = sheetConfig.getRange(i, 2).getValue();
     var stringi = sheetConfig.getRange(i, 3).getValue();
-    if (trafoId !== "") {
+    
+    // Czyszczenie i parsowanie Trafo ID (np. "Trafo 5" -> 5)
+    var cleanId = String(trafoId).replace(/\\D/g, "");
+    if (cleanId !== "") {
       trafos.push({
-        id: parseInt(trafoId),
+        id: parseInt(cleanId),
         falowniki: parseInt(falowniki) || 12,
         stringi: parseInt(stringi) || 21
       });
     }
   }
-  var sheetDC = ss.getSheetByName("Metry");
+  
+  var sheetDC = null;
+  var sheetAC = null;
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName().toLowerCase().replace(/\\s/g, "");
+    if (name === "metry") {
+      sheetDC = sheets[i];
+    } else if (name === "metryac" || name === "metry_ac") {
+      sheetAC = sheets[i];
+    }
+  }
+  
   var metryDC = [];
   if (sheetDC) {
     var lastRowDC = sheetDC.getLastRow();
     if (lastRowDC > 1) {
       var valuesDC = sheetDC.getRange(2, 1, lastRowDC - 1, 11).getValues();
       for (var j = 0; j < valuesDC.length; j++) {
-        metryDC.push({
-          ID: valuesDC[j][0],
-          Data_Wpisu: valuesDC[j][1],
-          Trafo: valuesDC[j][2],
-          Team: valuesDC[j][3],
-          WR: valuesDC[j][4],
-          Numer_Bębna_Stringu: valuesDC[j][5],
-          Zuzycie: valuesDC[j][6],
-          Zapas: valuesDC[j][7],
-          Odczyt_start: valuesDC[j][8],
-          Odczyt_Koniec: valuesDC[j][9],
-          Dlugosc_bebna: valuesDC[j][10]
-        });
+        if (valuesDC[j][0] !== "") {
+          metryDC.push({
+            ID: valuesDC[j][0],
+            Data_Wpisu: valuesDC[j][1],
+            Trafo: valuesDC[j][2],
+            Team: valuesDC[j][3],
+            WR: valuesDC[j][4],
+            Numer_Bębna_Stringu: valuesDC[j][5],
+            Zuzycie: valuesDC[j][6],
+            Zapas: valuesDC[j][7],
+            Odczyt_start: valuesDC[j][8],
+            Odczyt_Koniec: valuesDC[j][9],
+            Dlugosc_bebna: valuesDC[j][10]
+          });
+        }
       }
     }
   }
-  var sheetAC = ss.getSheetByName("Metry AC");
+  
   var metryAC = [];
   if (sheetAC) {
     var lastRowAC = sheetAC.getLastRow();
     if (lastRowAC > 1) {
       var valuesAC = sheetAC.getRange(2, 1, lastRowAC - 1, 9).getValues();
       for (var k = 0; k < valuesAC.length; k++) {
-        metryAC.push({
-          ID: valuesAC[k][0],
-          Data_Wpisu: valuesAC[k][1],
-          Trafo: valuesAC[k][2],
-          Team: valuesAC[k][3],
-          WR: valuesAC[k][4],
-          Zuzycie: valuesAC[k][5],
-          Odczyt_start: valuesAC[k][6],
-          Odczyt_Koniec: valuesAC[k][7],
-          Numer_Elementu: valuesAC[k][8] || "Kabel AC"
-        });
+        if (valuesAC[k][0] !== "") {
+          metryAC.push({
+            ID: valuesAC[k][0],
+            Data_Wpisu: valuesAC[k][1],
+            Trafo: valuesAC[k][2],
+            Team: valuesAC[k][3],
+            WR: valuesAC[k][4],
+            Zuzycie: valuesAC[k][5],
+            Odczyt_start: valuesAC[k][6],
+            Odczyt_Koniec: valuesAC[k][7],
+            Numer_Elementu: valuesAC[k][8] || "Kabel AC"
+          });
+        }
       }
     }
   }
+  
   var response = {
     konfiguracja: { trybPracy: trybPracy, iloscTeamow: parseInt(iloscTeamow), trafos: trafos },
     metryDC: metryDC,
     metryAC: metryAC
   };
-  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
+  
+  // WYSYLKA JAKO TEXT - ZAPOBIEGA BLEDOM CORS PRZEKIEROWAN
+  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.TEXT);
 }
 
 function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var postData = JSON.parse(e.postData.contents);
-  if (postData.action === 'clear_database') {
-    var sConfig = ss.getSheetByName("Konfiguracja");
-    if (sConfig) {
-      sConfig.getRange("B1").setValue("Bębny");
-      sConfig.getRange("B2").setValue(2);
-      sConfig.getRange("A5:C100").clearContent();
-      sConfig.getRange("A5").setValue(1); sConfig.getRange("B5").setValue(12); sConfig.getRange("C5").setValue(21);
-      sConfig.getRange("A6").setValue(2); sConfig.getRange("B6").setValue(12); sConfig.getRange("C6").setValue(21);
-      sConfig.getRange("A7").setValue(3); sConfig.getRange("B7").setValue(12); sConfig.getRange("C7").setValue(21);
-      sConfig.getRange("A8").setValue(4); sConfig.getRange("B8").setValue(14); sConfig.getRange("C8").setValue(21);
+  var sheets = ss.getSheets();
+  
+  var sheetConfig = null;
+  var sheetDC = null;
+  var sheetAC = null;
+  
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName().toLowerCase().replace(/\\s/g, "");
+    if (name === "konfiguracja") {
+      sheetConfig = sheets[i];
+    } else if (name === "metry") {
+      sheetDC = sheets[i];
+    } else if (name === "metryac" || name === "metry_ac") {
+      sheetAC = sheets[i];
     }
-    var sDC = ss.getSheetByName("Metry");
-    if (sDC) { sDC.clear(); sDC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Numer_Bębna_Stringu", "Zuzycie", "Zapas", "Odczyt_start", "Odczyt_Koniec", "Dlugosc_bebna"]); }
-    var sAC = ss.getSheetByName("Metry AC");
-    if (sAC) { sAC.clear(); sAC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Zuzycie", "Odczyt_start", "Odczyt_Koniec", "Numer_Elementu"]); }
+  }
+  
+  if (postData.action === 'clear_database') {
+    if (sheetConfig) {
+      sheetConfig.getRange("B1").setValue("Bębny");
+      sheetConfig.getRange("B2").setValue(2);
+      sheetConfig.getRange("A5:C100").clearContent();
+      sheetConfig.getRange("A5").setValue(1); sheetConfig.getRange("B5").setValue(12); sheetConfig.getRange("C5").setValue(21);
+      sheetConfig.getRange("A6").setValue(2); sheetConfig.getRange("B6").setValue(12); sheetConfig.getRange("C6").setValue(21);
+      sheetConfig.getRange("A7").setValue(3); sheetConfig.getRange("B7").setValue(12); sheetConfig.getRange("C7").setValue(21);
+      sheetConfig.getRange("A8").setValue(4); sheetConfig.getRange("B8").setValue(14); sheetConfig.getRange("C8").setValue(21);
+    }
+    if (sheetDC && sheetDC.getLastRow() > 1) {
+      sheetDC.getRange(2, 1, sheetDC.getLastRow() - 1, sheetDC.getLastColumn()).clearContent();
+    }
+    if (sheetAC && sheetAC.getLastRow() > 1) {
+      sheetAC.getRange(2, 1, sheetAC.getLastRow() - 1, sheetAC.getLastColumn()).clearContent();
+    }
     return ContentService.createTextOutput("Wyczyszczono").setMimeType(ContentService.MimeType.TEXT);
   }
-  var sheetDC = ss.getSheetByName("Metry") || ss.insertSheet("Metry");
-  sheetDC.clear();
-  sheetDC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Numer_Bębna_Stringu", "Zuzycie", "Zapas", "Odczyt_start", "Odczyt_Koniec", "Dlugosc_bebna"]);
+  
+  // Zapis danych DC (Metry) - CZYSZCZENIE TYLKO ELEMENTOW (BEZ KOLUMN I FORMATOW)
+  if (!sheetDC) {
+    sheetDC = ss.insertSheet("Metry");
+    sheetDC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Numer_Bębna_Stringu", "Zuzycie", "Zapas", "Odczyt_start", "Odczyt_Koniec", "Dlugosc_bebna"]);
+  } else if (sheetDC.getLastRow() > 1) {
+    sheetDC.getRange(2, 1, sheetDC.getLastRow() - 1, sheetDC.getLastColumn()).clearContent();
+  }
+  
   if (postData.metryDC && postData.metryDC.length > 0) {
     postData.metryDC.forEach(function(row) {
       sheetDC.appendRow([row.ID, row.Data_Wpisu, row.Trafo, row.Team, row.WR, row.Numer_Bębna_Stringu, row.Zuzycie, row.Zapas, row.Odczyt_start, row.Odczyt_Koniec, row.Dlugosc_bebna]);
     });
   }
-  var sheetAC = ss.getSheetByName("Metry AC") || ss.insertSheet("Metry AC");
-  sheetAC.clear();
-  sheetAC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Zuzycie", "Odczyt_start", "Odczyt_Koniec", "Numer_Elementu"]);
+  
+  // Zapis danych AC (Metry AC) - BEZ FORMATU I NAGLOWKOW
+  if (!sheetAC) {
+    sheetAC = ss.insertSheet("Metry AC");
+    sheetAC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Zuzycie", "Odczyt_start", "Odczyt_Koniec", "Numer_Elementu"]);
+  } else if (sheetAC.getLastRow() > 1) {
+    sheetAC.getRange(2, 1, sheetAC.getLastRow() - 1, sheetAC.getLastColumn()).clearContent();
+  }
+  
   if (postData.metryAC && postData.metryAC.length > 0) {
     postData.metryAC.forEach(function(row) {
       sheetAC.appendRow([row.ID, row.Data_Wpisu, row.Trafo, row.Team, row.WR, row.Zuzycie, row.Odczyt_start, row.Odczyt_Koniec, row.Numer_Elementu || "Kabel AC"]);
     });
   }
+  
   return ContentService.createTextOutput("Zapisano pomyślnie").setMimeType(ContentService.MimeType.TEXT);
 }`}
                                                 />
