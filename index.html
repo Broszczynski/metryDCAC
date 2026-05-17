@@ -37,7 +37,7 @@
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
         }
-        /* Custom scrollbar dla estetyki premium */
+        /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -63,7 +63,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // Domyślna konfiguracja startowa - 4 Trafostacje, 21 stringów na każdym falowniku
+        // Fabryczna konfiguracja startowa - 4 Trafostacje, 21 stringów na każdym falowniku
         const DOMYSLNA_KONFIGURACJA = {
           trybPracy: 'Bębny',
           iloscTeamow: 2,
@@ -76,7 +76,6 @@
         };
 
         // Pomocniczy komponent do renderowania ikon Lucide bezpośrednio w React
-        // Usunięto nowoczesne operatory JS w celu zapewnienia 100% kompatybilności z kompilatorem Babel w Canvas
         function Icon({ name, className }) {
             const classVal = className || "h-5 w-5";
             const elRef = useRef(null);
@@ -105,13 +104,13 @@
             const [wybraneTrafo, setWybraneTrafo] = useState(1); 
             const [wybranyFalownik, setWybranyFalownik] = useState(null); 
             
-            // Konfiguracja projektu z localStorage (offline-first)
+            // Konfiguracja projektu pobierana wyłącznie z arkusza (lub domyślna przy braku sieci)
             const [konfig, setKonfig] = useState(() => {
                 const lokalny = localStorage.getItem('kabel_konfig');
                 return lokalny ? JSON.parse(lokalny) : DOMYSLNA_KONFIGURACJA;
             });
             
-            // Metry (baza wszystkich wpisów pomiarowych)
+            // Metry (baza wszystkich wpisów pomiarowych pobierana bezpośrednio z Google Sheets)
             const [pomiary, setPomiary] = useState(() => {
                 const lokalne = localStorage.getItem('kabel_pomiary');
                 return lokalne ? JSON.parse(lokalne) : [];
@@ -134,13 +133,13 @@
             const [powiadomienie, setPowiadomienie] = useState(null);
             const [czyCzyszczenieBazy, setCzyCzyszczenieBazy] = useState(false);
 
-            // Zapisz konfigurację lokalnie przy zmianach
+            // Zapisz konfigurację lokalnie przy zmianach (jako kopia zapasowa)
             const zapiszKonfiguracje = (nowyKonfig) => {
                 setKonfig(nowyKonfig);
                 localStorage.setItem('kabel_konfig', JSON.stringify(nowyKonfig));
             };
 
-            // Zapisz pomiary lokalnie przy zmianach
+            // Zapisz pomiary lokalnie przy zmianach (jako kopia zapasowa)
             const zapiszPomiary = (nowePomiary) => {
                 setPomiary(nowePomiary);
                 localStorage.setItem('kabel_pomiary', JSON.stringify(nowePomiary));
@@ -317,12 +316,10 @@
                 let zaktualizowaneWpisy = [];
 
                 if (aktywnaZakladka === 'dc' && konfig.trybPracy === 'Stringi') {
-                    // Pomijamy puste stringi (gdzie start, koniec i zużycie są równe zero)
                     zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
                         return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
                     });
                 } else if (aktywnaZakladka === 'ac') {
-                    // Pomijamy puste kable AC
                     zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
                         return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
                     });
@@ -347,22 +344,21 @@
                     };
                 });
 
-                // Usuwamy przestarzałe pomiary dla tego inwertera i aktualnego typu z bazy
                 const przefiltrowanaLista = pomiary.filter(function(p) {
                     return !(p.wr === wybranyFalownik && p.typ === (aktywnaZakladka === 'dc' ? 'DC' : 'AC'));
                 });
 
                 const nowaListaPomiarowa = [...przefiltrowanaLista, ...sformatowane];
                 
-                // 1. Zapis lokalny (zabezpieczenie offline)
+                // Zapis lokalny (zabezpieczenie)
                 zapiszPomiary(nowaListaPomiarowa);
                 setWybranyFalownik(null); // Powrót do ekranu falowników
                 
-                // 2. Automatyczna wysyłka do Arkusza Google na żywo
+                // Automatyczna natychmiastowa wysyłka do Arkusza Google
                 if (sheetWebhookUrl) {
                     wyslijPomiaryDoArkusza(nowaListaPomiarowa);
                 } else {
-                    pokazPowiadomienie("Zapisano tylko lokalnie (Brak linku do Arkusza Google na stronie startowej).", "warning");
+                    pokazPowiadomienie("Brak połączenia! Podaj link Apps Script na stronie startowej.", "warning");
                 }
             };
 
@@ -403,7 +399,6 @@
                 setAktywnaZakladka('dc');
                 setCzyCzyszczenieBazy(false);
                 
-                // Jeśli jest podpięty webhook, czyścimy też bazę w chmurze
                 if (sheetWebhookUrl) {
                     setStatusSynchronizacji('Czyszczenie chmury...');
                     try {
@@ -434,7 +429,7 @@
             const wyslijPomiaryDoArkusza = async (listaPomiarow) => {
                 if (!sheetWebhookUrl) return;
                 setCzyTrwaSync(true);
-                setStatusSynchronizacji('Zapisywanie w Google Sheets...');
+                setStatusSynchronizacji('Zapisywanie...');
 
                 try {
                     const payload = {
@@ -472,22 +467,25 @@
 
                     await fetch(sheetWebhookUrl, {
                         method: 'POST',
-                        mode: 'no-cors', // Standardowe obejście CORS w Google Apps Script przy zapisie
+                        mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
 
-                    setStatusSynchronizacji('Wysłano!');
+                    setStatusSynchronizacji('Zapisano!');
                     setCzyTrwaSync(false);
-                    pokazPowiadomienie("Dane zostały poprawnie zapisane i wysłane do Arkusza Google!", "success");
+                    pokazPowiadomienie("Dane zapisane bezpośrednio w Arkuszu Google!", "success");
+                    
+                    // Po pomyślnym wysłaniu, od razu pobierz aktualny stan dla weryfikacji
+                    pobierzZGoogleSheets(true);
                 } catch (err) {
                     setStatusSynchronizacji('Błąd wysyłki');
                     setCzyTrwaSync(false);
-                    pokazPowiadomienie("Dane zapisane tylko lokalnie na telefonie (błąd połączenia z Arkuszem).", "error");
+                    pokazPowiadomienie("Błąd zapisu w Arkuszu Google. Sprawdź połączenie.", "error");
                 }
             };
 
-            // --- METODA GET: POBRANIE NAJNOWSZYCH DANYCH Z GOOGLE SHEETS ---
+            // --- METODA GET: POBRANIE NAJNOWSZYCH DANYCH Z GOOGLE SHEETS (Z CACHE-BUSTINGIEM) ---
             const pobierzZGoogleSheets = async (cichyImport) => {
                 if (!sheetWebhookUrl) {
                     if (!cichyImport) {
@@ -497,10 +495,13 @@
                 }
                 
                 setCzyTrwaSync(true);
-                setStatusSynchronizacji('Pobieranie bazy i konfiguracji...');
+                setStatusSynchronizacji('Pobieranie...');
                 
                 try {
-                    const response = await fetch(sheetWebhookUrl + '?action=get_all_data');
+                    // DODANIE UNIKALNEGO PARAMETRU CZASU, ABY OMINĄĆ AGRESYWNE BUFOROWANIE GOOGLE PRZEKIEROWAŃ
+                    const urlZCacheBusterem = sheetWebhookUrl + (sheetWebhookUrl.indexOf('?') !== -1 ? '&' : '?') + 'action=get_all_data&_t=' + Date.now();
+                    
+                    const response = await fetch(urlZCacheBusterem);
                     const dane = await response.json();
                     
                     if (dane && dane.konfiguracja) {
@@ -559,17 +560,17 @@
                         setStatusSynchronizacji('Zsynchronizowano!');
                         setCzyTrwaSync(false);
                         if (!cichyImport) {
-                            pokazPowiadomienie("Baza pomyślnie zsynchronizowana z Arkuszem Google!", "success");
+                            pokazPowiadomienie("Zsynchronizowano pomyślnie z Arkuszem Google!", "success");
                         }
                     } else {
                         setCzyTrwaSync(false);
-                        setStatusSynchronizacji('Pusty schemat');
+                        setStatusSynchronizacji('Błąd struktury');
                     }
                 } catch (err) {
                     setCzyTrwaSync(false);
                     setStatusSynchronizacji('Błąd synchronizacji');
                     if (!cichyImport) {
-                        pokazPowiadomienie("Nie udało się pobrać danych. Sprawdź status wdrożenia Apps Script.", "error");
+                        pokazPowiadomienie("Błąd połączenia. Upewnij się, że link Apps Script jest prawidłowy i wdrożony jako 'Każdy'.", "error");
                     }
                 }
             };
@@ -595,7 +596,7 @@
                                     <div>
                                         <h3 className="font-bold text-lg text-white">Reset fabryczny</h3>
                                         <p className="text-sm text-neutral-400 mt-1">
-                                            Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to wyczyszczenie wszystkich pomiarów w aplikacji (i w chmurze, jeśli masz podpięty arkusz).
+                                            Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to wyczyszczenie wszystkich pomiarów w aplikacji oraz wyczyszczenie arkuszy w chmurze Google.
                                         </p>
                                     </div>
                                 </div>
@@ -623,7 +624,7 @@
                             <button onClick={() => { setAktywnaZakladka('dc'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'dc' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable DC</button>
                             <button onClick={() => { setAktywnaZakladka('ac'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'ac' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable AC</button>
                             
-                            {/* PRZYCISK SZYBKIEGO ODŚWIEŻANIA (ZBIERA AKTUALNY KONFIG I WPISY MONTERÓW) */}
+                            {/* PRZYCISK SZYBKIEGO ODŚWIEŻANIA W NAGŁÓWKU */}
                             <button 
                                 onClick={() => pobierzZGoogleSheets(false)} 
                                 className="p-2 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center justify-center"
@@ -642,7 +643,7 @@
                         <div className="bg-neutral-900 border-b border-neutral-800 px-4 py-2 flex items-center justify-between text-xs">
                             <span className="text-neutral-400 flex items-center gap-1.5">
                                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Synchronizacja aktywna (Google Sheets)
+                                Połączono z Google Sheets (Live)
                             </span>
                             <div className="flex items-center gap-1">
                                 <span className="text-neutral-500 uppercase text-[9px]">Status:</span>
@@ -679,7 +680,7 @@
                                     </div>
                                     
                                     <p className="text-xs text-neutral-400 leading-relaxed">
-                                        Wklej poniższy adres URL z wdrożenia Google Apps Script. Aplikacja pobierze z niego strukturę projektu (Trafostacje, Falowniki, Stringi, Tryb Pracy) oraz metry wszystkich ekip na budowie.
+                                        Podaj link z Google Apps Script, aby pobierać i aktualizować strukturę budowy (Trafostacje, Inwertery, Stringi, Tryb) bezpośrednio z arkusza.
                                     </p>
 
                                     <div className="flex flex-col sm:flex-row gap-2">
