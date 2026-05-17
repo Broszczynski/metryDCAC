@@ -120,7 +120,7 @@
             // Formularz wpisów dla aktualnie wybranego falownika (WR)
             const [formularzWpisow, setFormularzWpisow] = useState([]);
             
-            // Google Sheets URL
+            // Google Sheets URL wczytywany i zapisywany bezpośrednio w localStorage
             const [sheetWebhookUrl, setSheetWebhookUrl] = useState(() => {
                 return localStorage.getItem('kabel_sheet_url') || '';
             });
@@ -140,6 +140,12 @@
             const zapiszPomiary = (nowePomiary) => {
                 setPomiary(nowePomiary);
                 localStorage.setItem('kabel_pomiary', JSON.stringify(nowePomiary));
+            };
+
+            // Zapisz sam link Apps Script Webhook
+            const zapiszWebhookUrl = (url) => {
+                setSheetWebhookUrl(url);
+                localStorage.setItem('kabel_sheet_url', url);
             };
 
             // --- FUNKCJA POWIADOMIENIA ---
@@ -337,7 +343,7 @@
                 const nowaListaPomiarowa = [...przefiltrowanaLista, ...sformatowane];
                 
                 zapiszPomiary(nowaListaPomiarowa);
-                pokazPowiadomienie("Zapisano lokalnie. Wyślij dane do Arkusza Google w panelu synchronizacji, aby zapisać je na stałe w bazie głównej.", "success");
+                pokazPowiadomienie("Zapisano lokalnie. Aby przesłać dane do bazy głównej, użyj funkcji 'Wyślij (Zapisz)' w zakładce z ikoną tabeli.", "success");
                 setWybranyFalownik(null);
             };
 
@@ -407,10 +413,9 @@
             // --- DWUKIERUNKOWA SYNCHRONIZACJA Z GOOGLE SHEETS ---
             const eksportujDoGoogleSheets = async () => {
                 if (!sheetWebhookUrl) {
-                    pokazPowiadomienie("Wpisz adres Webhook URL aplikacji Google Apps Script w zakładce synchronizacji.", "warning");
+                    pokazPowiadomienie("Wpisz najpierw link Apps Script w konfiguracji na stronie startowej!", "warning");
                     return;
                 }
-                localStorage.setItem('kabel_sheet_url', sheetWebhookUrl);
                 setStatusSynchronizacji('Wysyłanie danych...');
 
                 try {
@@ -464,10 +469,9 @@
 
             const pobierzZGoogleSheets = async () => {
                 if (!sheetWebhookUrl) {
-                    pokazPowiadomienie("Wpisz adres Webhook URL, aby pobrać dane.", "warning");
+                    pokazPowiadomienie("Wpisz najpierw link Apps Script w konfiguracji na stronie startowej!", "warning");
                     return;
                 }
-                localStorage.setItem('kabel_sheet_url', sheetWebhookUrl);
                 setStatusSynchronizacji('Pobieranie konfiguracji i metrów...');
                 
                 try {
@@ -575,6 +579,19 @@
                         <div className="flex items-center gap-1.5">
                             <button onClick={() => { setAktywnaZakladka('dc'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'dc' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable DC</button>
                             <button onClick={() => { setAktywnaZakladka('ac'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'ac' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable AC</button>
+                            
+                            {/* PRZYCISK ODŚWIEŻANIA OBOK AC */}
+                            <button 
+                                onClick={pobierzZGoogleSheets} 
+                                className="p-2 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center justify-center"
+                                title="Odśwież metry i konfigurację z Google Sheets"
+                            >
+                                <Icon 
+                                    name="refresh-cw" 
+                                    className={"h-4 w-4 " + (statusSynchronizacji.indexOf('Pobieranie') !== -1 ? "animate-spin text-emerald-400" : "")} 
+                                />
+                            </button>
+
                             <button onClick={() => setAktywnaZakladka('sheets')} className={`p-2 rounded-lg transition-colors ${aktywnaZakladka === 'sheets' ? 'bg-emerald-500/10 text-emerald-400' : 'text-neutral-400 hover:text-white'}`} title="Google Sheets Sync"><Icon name="file-spreadsheet" className="h-4 w-4" /></button>
                             <button onClick={() => setAktywnaZakladka('ustawienia')} className={`p-2 rounded-lg transition-colors ${aktywnaZakladka === 'ustawienia' ? 'bg-emerald-500/10 text-emerald-400' : 'text-neutral-400 hover:text-white'}`} title="Ustawienia projektu"><Icon name="settings" className="h-4 w-4" /></button>
                         </div>
@@ -603,19 +620,55 @@
                         {/* WIDOK 1: WYBÓR TEAMU */}
                         {!wybranyTeam && (
                             <div className="space-y-6">
+                                
+                                {/* GLOBALNE WPISYWANIE LINKU GOOGLE APPS SCRIPT (ZAPISYWANE NA STAŁE) */}
+                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-3.5 shadow-xl">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400">
+                                                <Icon name="file-spreadsheet" className="h-4 w-4" />
+                                            </div>
+                                            <h3 className="text-xs font-black tracking-wider uppercase text-white">Połączenie z bazą Arkusza Google</h3>
+                                        </div>
+                                        {sheetWebhookUrl ? (
+                                            <span className="text-[10px] px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full font-bold uppercase tracking-wider">
+                                                Aktywne
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full font-bold uppercase tracking-wider">
+                                                Brak Połączenia
+                                            </span>
+                                        )}
+                                    </div>
+                                    
+                                    <p className="text-xs text-neutral-400 leading-relaxed">
+                                        Podaj poniżej adres URL z Google Apps Script. System zapamięta go na stałe na tym urządzeniu i będzie z niego korzystał do pobierania i wysyłania danych.
+                                    </p>
+
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="url" 
+                                            value={sheetWebhookUrl} 
+                                            onChange={(e) => zapiszWebhookUrl(e.target.value)} 
+                                            placeholder="Wklej link Apps Script (https://script.google.com/macros/s/.../exec)" 
+                                            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono placeholder:text-neutral-700" 
+                                        />
+                                        {sheetWebhookUrl && (
+                                            <button 
+                                                onClick={pobierzZGoogleSheets}
+                                                className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 rounded-xl text-xs font-black uppercase transition flex items-center gap-1.5 shrink-0"
+                                            >
+                                                <Icon name="refresh-cw" className="h-3 w-3 text-black" />
+                                                Odśwież
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
                                 <div className="text-center space-y-2 py-4">
                                     <h2 className="text-2xl font-black text-white tracking-tight">KROK 1: WYBÓR ZESPOŁU</h2>
                                     <p className="text-sm text-neutral-400 max-w-md mx-auto">Wybierz swój zespół roboczy, aby rozpocząć ewidencjonowanie pomiarów kabli na budowie.</p>
                                 </div>
-
-                                {sheetWebhookUrl && (
-                                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-2xl flex items-center justify-between text-xs font-semibold">
-                                        <span>Masz podpięty arkusz. Przed wyborem zespołu zalecamy pobrać najnowszy stan.</span>
-                                        <button onClick={pobierzZGoogleSheets} className="flex items-center gap-1.5 bg-emerald-500 text-black px-3 py-1.5 rounded-xl font-extrabold hover:bg-emerald-400 transition">
-                                            <Icon name="refresh-cw" className="h-3 w-3 text-black" /> Pobierz dane
-                                        </button>
-                                    </div>
-                                )}
 
                                 <div className="grid gap-3">
                                     {Array.from({ length: konfig.iloscTeamow }).map((_, i) => {
@@ -972,7 +1025,7 @@
                                 <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] text-neutral-400 font-bold uppercase block">Google Apps Script Webhook URL</label>
-                                        <input type="url" value={sheetWebhookUrl} onChange={(e) => setSheetWebhookUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-white font-mono" />
+                                        <input type="url" value={sheetWebhookUrl} onChange={(e) => zapiszWebhookUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-white font-mono" />
                                     </div>
 
                                     {statusSynchronizacji && (
