@@ -1,199 +1,1189 @@
-/**
- * Obsługa żądań GET (Dystrybucja konfiguracji projektu i pomiarów do aplikacji)
- */
-function doGet(e) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+<!DOCTYPE html>
+<html lang="pl" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRAFO-KABEL - System Ewidencji Pomiarów</title>
     
-    // --- 1. ODCZYT KONFIGURACJI ---
-    var configSheet = ss.getSheetByName("Konfiguracja");
-    var configData = {
-      globalWorkMode: "drums",
-      stringsCountPerInverter: 12,
-      teams: [
-        { id: "team-1", name: "Team 1" },
-        { id: "team-2", name: "Team 2" },
-        { id: "team-3", name: "Team 3" }
-      ],
-      trafos: [
-        { id: "trafo-1", trafoNo: 1, inverterCount: 12 },
-        { id: "trafo-2", trafoNo: 2, inverterCount: 8 }
-      ]
-    };
-
-    if (configSheet) {
-      // Pobieranie wartości trybu pracy i stringów
-      var modeVal = configSheet.getRange("B1").getValue();
-      if (modeVal) configData.globalWorkMode = modeVal.toString().toLowerCase() === "stringi" ? "strings" : "drums";
-      
-      var stringsVal = parseInt(configSheet.getRange("B2").getValue());
-      if (!isNaN(stringsVal)) configData.stringsCountPerInverter = stringsVal;
-
-      // Pobieranie Zespołów (Kolumny D-E)
-      var teamRows = configSheet.getRange("D2:E" + configSheet.getLastRow()).getValues();
-      var parsedTeams = [];
-      for (var i = 0; i < teamRows.length; i++) {
-        if (teamRows[i][0] && teamRows[i][1]) {
-          parsedTeams.push({ id: teamRows[i][0].toString(), name: teamRows[i][1].toString() });
+    <!-- Tailwind CSS dla stylizacji Premium Dark Mode -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        neutral: {
+                            950: '#0a0a0a',
+                        }
+                    }
+                }
+            }
         }
-      }
-      if (parsedTeams.length > 0) configData.teams = parsedTeams;
+    </script>
+    
+    <!-- React & ReactDOM (Uruchamiane bezpośrednio z CDN) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel compiler do uruchamiania JSX bezpośrednio w przeglądarce -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-      // Pobieranie Trafostacji (Kolumny G-I)
-      var trafoRows = configSheet.getRange("G2:I" + configSheet.getLastRow()).getValues();
-      var parsedTrafos = [];
-      for (var j = 0; j < trafoRows.length; j++) {
-        if (trafoRows[j][0] && trafoRows[j][1]) {
-          parsedTrafos.push({
-            id: trafoRows[j][0].toString(),
-            trafoNo: parseInt(trafoRows[j][1]),
-            inverterCount: parseInt(trafoRows[j][2] || 10)
-          });
+    <!-- Ikony Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
         }
-      }
-      if (parsedTrafos.length > 0) configData.trafos = parsedTrafos;
-    } else {
-      // Inicjalizacja domyślnego arkusza konfiguracyjnego jeśli go brak
-      configSheet = ss.insertSheet("Konfiguracja");
-      configSheet.getRange("A1:B2").setValues([
-        ["Tryb pracy (Bębny / Stringi)", "Bębny"],
-        ["Stringów na falownik (WR)", 12]
-      ]);
-      
-      configSheet.getRange("D1:E4").setValues([
-        ["ID Zespołu", "Nazwa Zespołu", "", ""],
-        ["team-1", "Team 1", "", ""],
-        ["team-2", "Team 2", "", ""],
-        ["team-3", "Team 3", "", ""]
-      ]);
+        /* Custom scrollbar dla estetyki premium */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #10b981;
+        }
+    </style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 min-h-screen antialiased">
 
-      configSheet.getRange("G1:I3").setValues([
-        ["ID Trafostacji", "Nr Trafostacji", "Ilość Falowników"],
-        ["trafo-1", 1, 12],
-        ["trafo-2", 2, 8]
-      ]);
+    <!-- Kontener montowania aplikacji React -->
+    <div id="root"></div>
 
-      var headerRange = configSheet.getRange("A1:I1");
-      headerRange.setFontWeight("bold");
-      headerRange.setBackground("#a3e635");
-      headerRange.setFontColor("#09090b");
+    <!-- Kod aplikacji React napisany w standardzie JSX -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Domyślna konfiguracja startowa (używana przed pierwszym pobraniem z Google Sheets)
+        const DOMYSLNA_KONFIGURACJA = {
+          trybPracy: 'Bębny', // 'Bębny' lub 'Stringi'
+          iloscTeamow: 2,
+          trafos: [
+            { id: 1, falowniki: 12, stringi: 12 },
+            { id: 2, falowniki: 12, stringi: 21 },
+            { id: 3, falowniki: 12, stringi: 21 },
+            { id: 4, falowniki: 14, stringi: 21 }
+          ]
+        };
+
+        // Pomocniczy komponent do renderowania ikon Lucide bezpośrednio w React
+        // Usunięto nowoczesne operatory JS w celu zapewnienia 100% kompatybilności z kompilatorem Babel w Canvas
+        function Icon({ name, className }) {
+            const classVal = className || "h-5 w-5";
+            const elRef = useRef(null);
+            useEffect(() => {
+                if (elRef.current) {
+                    elRef.current.innerHTML = '';
+                    const map = {};
+                    map[name] = name;
+                    const icon = lucide.createIcons({
+                        attrs: { class: classVal },
+                        nameMap: map
+                    });
+                    const svg = document.createElement('i');
+                    svg.setAttribute('data-lucide', name);
+                    elRef.current.appendChild(svg);
+                    lucide.createIcons({ node: elRef.current });
+                }
+            }, [name, classVal]);
+            return <span ref={elRef} className="inline-flex items-center justify-center"></span>;
+        }
+
+        function App() {
+            // --- STANY SYSTEMOWE ---
+            const [wybranyTeam, setWybranyTeam] = useState(null); 
+            const [aktywnaZakladka, setAktywnaZakladka] = useState('dc'); // 'dc', 'ac', 'sheets', 'ustawienia'
+            const [wybraneTrafo, setWybraneTrafo] = useState(1); 
+            const [wybranyFalownik, setWybranyFalownik] = useState(null); 
+            
+            // Konfiguracja projektu z localStorage (offline-first)
+            const [konfig, setKonfig] = useState(() => {
+                const lokalny = localStorage.getItem('kabel_konfig');
+                return lokalny ? JSON.parse(lokalny) : DOMYSLNA_KONFIGURACJA;
+            });
+            
+            // Metry (baza wszystkich wpisów pomiarowych)
+            const [pomiary, setPomiary] = useState(() => {
+                const lokalne = localStorage.getItem('kabel_pomiary');
+                return lokalne ? JSON.parse(lokalne) : [];
+            });
+            
+            // Formularz wpisów dla aktualnie wybranego falownika (WR)
+            const [formularzWpisow, setFormularzWpisow] = useState([]);
+            
+            // Google Sheets URL
+            const [sheetWebhookUrl, setSheetWebhookUrl] = useState(() => {
+                return localStorage.getItem('kabel_sheet_url') || '';
+            });
+            const [statusSynchronizacji, setStatusSynchronizacji] = useState('');
+            
+            // Powiadomienia
+            const [powiadomienie, setPowiadomienie] = useState(null);
+            const [czyCzyszczenieBazy, setCzyCzyszczenieBazy] = useState(false);
+
+            // Zapisz konfigurację lokalnie przy zmianach
+            const zapiszKonfiguracje = (nowyKonfig) => {
+                setKonfig(nowyKonfig);
+                localStorage.setItem('kabel_konfig', JSON.stringify(nowyKonfig));
+            };
+
+            // Zapisz pomiary lokalnie przy zmianach
+            const zapiszPomiary = (nowePomiary) => {
+                setPomiary(nowePomiary);
+                localStorage.setItem('kabel_pomiary', JSON.stringify(nowePomiary));
+            };
+
+            // --- FUNKCJA POWIADOMIENIA ---
+            const pokazPowiadomienie = (komunikat, typ) => {
+                const t = typ || 'info';
+                setPowiadomienie({ tekst: komunikat, typ: t });
+                setTimeout(() => {
+                    setPowiadomienie(null);
+                }, 4000);
+            };
+
+            // --- INICJALIZACJA I OBSŁUGA FORMULARZA ---
+            useEffect(() => {
+                if (!wybranyFalownik) return;
+
+                const typKabla = aktywnaZakladka === 'dc' ? 'DC' : 'AC';
+                const dopasowanePomiary = pomiary.filter(function(p) {
+                    return p.wr === wybranyFalownik && p.typ === typKabla;
+                });
+
+                if (aktywnaZakladka === 'dc') {
+                    if (konfig.trybPracy === 'Bębny') {
+                        if (dopasowanePomiary.length > 0) {
+                            const zaladowane = dopasowanePomiary.map(function(p) {
+                                return {
+                                    id: p.id,
+                                    dlugosc: p.dlugosc_bebna !== undefined ? p.dlugosc_bebna : 500,
+                                    start: p.start,
+                                    koniec: p.koniec,
+                                    zuzycie: p.zuzycie,
+                                    zapas: p.zapas,
+                                    team: p.team,
+                                    numer: p.numer_elementu
+                                };
+                            });
+                            setFormularzWpisow(zaladowane);
+                        } else {
+                            setFormularzWpisow([{
+                                id: 'beben-1-' + Date.now(),
+                                dlugosc: 500,
+                                start: 0,
+                                koniec: 0,
+                                zuzycie: 0,
+                                zapas: 500,
+                                team: wybranyTeam,
+                                numer: 'Bęben #1'
+                            }]);
+                        }
+                    } else {
+                        // STRINGI (DC)
+                        const trafoObj = konfig.trafos.find(function(t) { return t.id === wybraneTrafo; });
+                        const maxStringi = trafoObj ? trafoObj.stringi : 12;
+                        const stringiForm = [];
+                        for (let i = 1; i <= maxStringi; i++) {
+                            const nazwaStringu = 'String #' + i;
+                            const istniejacy = dopasowanePomiary.find(function(p) { return p.numer_elementu === nazwaStringu; });
+                            
+                            stringiForm.push({
+                                id: istniejacy ? istniejacy.id : 'string-' + i + '-' + Date.now(),
+                                start: istniejacy ? istniejacy.start : 0,
+                                koniec: istniejacy ? istniejacy.koniec : 0,
+                                zuzycie: istniejacy ? istniejacy.zuzycie : 0,
+                                team: istniejacy ? istniejacy.team : wybranyTeam,
+                                numer: nazwaStringu,
+                                zapas: 0
+                            });
+                        }
+                        setFormularzWpisow(stringiForm);
+                    }
+                } else {
+                    // KABLE AC (4 obwody domyślnie na falownik)
+                    const maxObwodyAC = 4;
+                    const acForm = [];
+                    for (let i = 1; i <= maxObwodyAC; i++) {
+                        const nazwaObwodu = 'Obwód AC #' + i;
+                        const istniejacy = dopasowanePomiary.find(function(p) { return p.numer_elementu === nazwaObwodu; });
+                        
+                        acForm.push({
+                            id: istniejacy ? istniejacy.id : 'ac-' + i + '-' + Date.now(),
+                            start: istniejacy ? istniejacy.start : 0,
+                            koniec: istniejacy ? istniejacy.koniec : 0,
+                            zuzycie: istniejacy ? istniejacy.zuzycie : 0,
+                            team: istniejacy ? istniejacy.team : wybranyTeam,
+                            numer: nazwaObwodu,
+                            zapas: 0
+                        });
+                    }
+                    setFormularzWpisow(acForm);
+                }
+            }, [wybranyFalownik, aktywnaZakladka, konfig.trybPracy, pomiary]);
+
+            // --- ZMIANA WPISU W FORMULARZU ---
+            const zmienWpisFormularza = (index, pole, wartosc) => {
+                const kopia = [...formularzWpisow];
+                const wpis = Object.assign({}, kopia[index]);
+                
+                const val = wartosc === '' ? 0 : Math.max(0, parseFloat(wartosc) || 0);
+                wpis[pole] = val;
+
+                if (pole === 'start' || pole === 'koniec' || pole === 'dlugosc') {
+                    const start = pole === 'start' ? val : wpis.start;
+                    const koniec = pole === 'koniec' ? val : wpis.koniec;
+                    const dlugosc = pole === 'dlugosc' ? val : wpis.dlugosc;
+
+                    // Wartość bezwzględna zużycia kabla
+                    wpis.zuzycie = Math.abs(start - koniec);
+
+                    // Jeśli długość bębna = 0, to zapas = 0
+                    if (konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc') {
+                        if (dlugosc === 0) {
+                            wpis.zapas = 0;
+                        } else {
+                            wpis.zapas = Math.max(0, dlugosc - wpis.zuzycie);
+                        }
+                    }
+                }
+
+                // Przypisanie do aktualnie edytującego zespołu, jeśli pole zostało faktycznie zmienione
+                wpis.team = wybranyTeam;
+
+                kopia[index] = wpis;
+                setFormularzWpisow(kopia);
+            };
+
+            const dodajKolejnyBeben = () => {
+                const kolejnyNumer = formularzWpisow.length + 1;
+                setFormularzWpisow([
+                    ...formularzWpisow,
+                    {
+                        id: 'beben-' + kolejnyNumer + '-' + Date.now(),
+                        dlugosc: 500,
+                        start: 0,
+                        koniec: 0,
+                        zuzycie: 0,
+                        zapas: 500,
+                        team: wybranyTeam,
+                        numer: 'Bęben #' + kolejnyNumer
+                    }
+                ]);
+            };
+
+            const usunBeben = (index) => {
+                if (formularzWpisow.length <= 1) {
+                    pokazPowiadomienie("Musisz zachować co najmniej jeden wpis bębna.", "warning");
+                    return;
+                }
+                const kopia = formularzWpisow.filter(function(_, i) { return i !== index; });
+                const przeliczona = kopia.map(function(b, idx) {
+                    return Object.assign({}, b, {
+                        numer: 'Bęben #' + (idx + 1)
+                    });
+                });
+                setFormularzWpisow(przeliczona);
+            };
+
+            // --- ZAPIS FORMULARZA I EKSPORT DO CHMURY ---
+            const zapiszFormularz = async () => {
+                let zaktualizowaneWpisy = [];
+
+                if (aktywnaZakladka === 'dc' && konfig.trybPracy === 'Stringi') {
+                    // Pomijamy zerowe wpisy w trybie stringów
+                    zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
+                        return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
+                    });
+                } else if (aktywnaZakladka === 'ac') {
+                    zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
+                        return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
+                    });
+                } else {
+                    zaktualizowaneWpisy = [...formularzWpisow];
+                }
+
+                const sformatowane = zaktualizowaneWpisy.map(function(w) {
+                    return {
+                        id: w.id,
+                        data: new Date().toLocaleString('pl-PL'),
+                        trafo: wybraneTrafo,
+                        team: w.team || wybranyTeam,
+                        wr: wybranyFalownik,
+                        typ: aktywnaZakladka === 'dc' ? 'DC' : 'AC',
+                        numer_elementu: w.numer,
+                        zuzycie: w.zuzycie,
+                        zapas: w.zapas || 0,
+                        start: w.start,
+                        koniec: w.koniec,
+                        dlugosc_bebna: w.dlugosc || 0
+                    };
+                });
+
+                // Usuwamy stare rekordy dla tego falownika i typu z lokalnego stanu
+                const przefiltrowanaLista = pomiary.filter(function(p) {
+                    return !(p.wr === wybranyFalownik && p.typ === (aktywnaZakladka === 'dc' ? 'DC' : 'AC'));
+                });
+
+                const nowaListaPomiarowa = [...przefiltrowanaLista, ...sformatowane];
+                
+                zapiszPomiary(nowaListaPomiarowa);
+                pokazPowiadomienie("Zapisano lokalnie. Wyślij dane do Arkusza Google w panelu synchronizacji, aby zapisać je na stałe w bazie głównej.", "success");
+                setWybranyFalownik(null);
+            };
+
+            // --- STATYSTYKI ---
+            const obliczSumeCalkowita = (typ) => {
+                const t = typ || 'DC';
+                return pomiary.filter(function(p) { return p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
+            };
+
+            const obliczSumeTrafo = (trafoId, typ) => {
+                const t = typ || 'DC';
+                return pomiary.filter(function(p) { return p.trafo === trafoId && p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
+            };
+
+            const obliczSumeTeam = (teamName, typ) => {
+                const t = typ || 'DC';
+                return pomiary.filter(function(p) { return p.team === teamName && p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
+            };
+
+            const obliczSumeFalownika = (wrKod, typ) => {
+                const t = typ || 'DC';
+                return pomiary.filter(function(p) { return p.wr === wrKod && p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
+            };
+
+            const pobierzAutorowWR = (wrKod, typ) => {
+                const t = typ || 'DC';
+                const autorzy = pomiary.filter(function(p) { return p.wr === wrKod && p.typ === t; }).map(function(p) { return p.team; });
+                return [...new Set(autorzy)];
+            };
+
+            const przywrocUstawieniaFabryczne = async () => {
+                zapiszKonfiguracje(DOMYSLNA_KONFIGURACJA);
+                zapiszPomiary([]);
+                setWybranyTeam(null);
+                setWybranyFalownik(null);
+                setWybraneTrafo(1);
+                setAktywnaZakladka('dc');
+                setCzyCzyszczenieBazy(false);
+                
+                // Jeśli jest podpięty webhook, czyścimy też bazę w chmurze
+                if (sheetWebhookUrl) {
+                    setStatusSynchronizacji('Czyszczenie chmury...');
+                    try {
+                        const payload = {
+                            action: 'clear_database',
+                            konfiguracja: DOMYSLNA_KONFIGURACJA,
+                            metryDC: [],
+                            metryAC: []
+                        };
+                        await fetch(sheetWebhookUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        setStatusSynchronizacji('Wyczyszczono arkusz!');
+                        pokazPowiadomienie("Przywrócono domyślne ustawienia fabryczne i wyczyszczono Arkusz Google!", "success");
+                    } catch (e) {
+                        setStatusSynchronizacji('Błąd czyszczenia');
+                        pokazPowiadomienie("Przywrócono lokalnie, ale nie udało się wyczyścić Arkusza Google.", "warning");
+                    }
+                } else {
+                    pokazPowiadomienie("Przywrócono domyślne ustawienia lokalne.", "success");
+                }
+            };
+
+            // --- DWUKIERUNKOWA SYNCHRONIZACJA Z GOOGLE SHEETS ---
+            const eksportujDoGoogleSheets = async () => {
+                if (!sheetWebhookUrl) {
+                    pokazPowiadomienie("Wpisz adres Webhook URL aplikacji Google Apps Script w zakładce synchronizacji.", "warning");
+                    return;
+                }
+                localStorage.setItem('kabel_sheet_url', sheetWebhookUrl);
+                setStatusSynchronizacji('Wysyłanie danych...');
+
+                try {
+                    const payload = {
+                        action: 'save_data',
+                        konfiguracja: konfig,
+                        metryDC: pomiary.filter(function(p) { return p.typ === 'DC'; }).map(function(p) {
+                            return {
+                                ID: p.id,
+                                Data_Wpisu: p.data,
+                                Trafo: p.trafo,
+                                Team: p.team,
+                                WR: p.wr,
+                                Numer_Bębna_Stringu: p.numer_elementu,
+                                Zuzycie: p.zuzycie,
+                                Zapas: p.zapas,
+                                Odczyt_start: p.start,
+                                Odczyt_Koniec: p.koniec,
+                                Dlugosc_bebna: p.dlugosc_bebna
+                            };
+                        }),
+                        metryAC: pomiary.filter(function(p) { return p.typ === 'AC'; }).map(function(p) {
+                            return {
+                                ID: p.id,
+                                Data_Wpisu: p.data,
+                                Trafo: p.trafo,
+                                Team: p.team,
+                                WR: p.wr,
+                                Numer_Elementu: p.numer_elementu,
+                                Zuzycie: p.zuzycie,
+                                Odczyt_start: p.start,
+                                Odczyt_Koniec: p.koniec
+                            };
+                        })
+                    };
+
+                    await fetch(sheetWebhookUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    setStatusSynchronizacji('Wysłano pomyślnie!');
+                    pokazPowiadomienie("Dane zostały wyeksportowane do bazy Arkusza Google!", "success");
+                } catch (err) {
+                    setStatusSynchronizacji('Błąd połączenia');
+                    pokazPowiadomienie("Nie udało się połączyć z arkuszem. Sprawdź adres Webhook.", "error");
+                }
+            };
+
+            const pobierzZGoogleSheets = async () => {
+                if (!sheetWebhookUrl) {
+                    pokazPowiadomienie("Wpisz adres Webhook URL, aby pobrać dane.", "warning");
+                    return;
+                }
+                localStorage.setItem('kabel_sheet_url', sheetWebhookUrl);
+                setStatusSynchronizacji('Pobieranie konfiguracji i metrów...');
+                
+                try {
+                    const response = await fetch(sheetWebhookUrl + '?action=get_all_data');
+                    const dane = await response.json();
+                    
+                    if (dane && dane.konfiguracja) {
+                        // 1. Synchronizujemy strukturę i ustawienia z Arkusza
+                        zapiszKonfiguracje(dane.konfiguracja);
+                        
+                        // 2. Synchronizujemy bazę pomiarów DC i AC
+                        const zaimportowane = [];
+                        if (dane.metryDC) {
+                            dane.metryDC.forEach(function(p) {
+                                zaimportowane.push({
+                                    id: p.ID,
+                                    data: p.Data_Wpisu,
+                                    trafo: parseInt(p.Trafo) || 1,
+                                    team: p.Team,
+                                    wr: p.WR,
+                                    typ: 'DC',
+                                    numer_elementu: p.Numer_Bębna_Stringu,
+                                    zuzycie: parseFloat(p.Zuzycie) || 0,
+                                    zapas: parseFloat(p.Zapas) || 0,
+                                    start: parseFloat(p.Odczyt_start) || 0,
+                                    koniec: parseFloat(p.Odczyt_Koniec) || 0,
+                                    dlugosc_bebna: parseFloat(p.Dlugosc_bebna) || 0
+                                });
+                            });
+                        }
+                        if (dane.metryAC) {
+                            dane.metryAC.forEach(function(p) {
+                                zaimportowane.push({
+                                    id: p.ID,
+                                    data: p.Data_Wpisu,
+                                    trafo: parseInt(p.Trafo) || 1,
+                                    team: p.Team,
+                                    wr: p.WR,
+                                    typ: 'AC',
+                                    numer_elementu: p.Numer_Elementu || 'Kabel AC',
+                                    zuzycie: parseFloat(p.Zuzycie) || 0,
+                                    zapas: 0,
+                                    start: parseFloat(p.Odczyt_start) || 0,
+                                    koniec: parseFloat(p.Odczyt_Koniec) || 0,
+                                    dlugosc_bebna: 0
+                                });
+                            });
+                        }
+                        
+                        zapiszPomiary(zaimportowane);
+                        setStatusSynchronizacji('Pełny Sync Gotowy!');
+                        pokazPowiadomienie("Zsynchronizowano drzewko konfiguracji i wszystkie pomiary z Arkusza Google!", "success");
+                    }
+                } catch (err) {
+                    setStatusSynchronizacji('Błąd synchronizacji');
+                    pokazPowiadomienie("Błąd importu. Upewnij się, że Twój Google Apps Script obsługuje metodę GET.", "error");
+                }
+            };
+
+            return (
+                <div className="flex flex-col min-h-screen">
+                    
+                    {/* POWIADOMIENIE */}
+                    {powiadomienie && (
+                        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+                            <Icon name={powiadomienie.typ === 'success' ? 'check' : powiadomienie.typ === 'warning' ? 'alert-triangle' : 'info'} 
+                                  className={powiadomienie.typ === 'success' ? 'text-emerald-400' : powiadomienie.typ === 'warning' ? 'text-amber-400' : 'text-sky-400'} />
+                            <div className="flex-1 text-sm font-medium">{powiadomienie.tekst}</div>
+                        </div>
+                    )}
+
+                    {/* MODAL RESETU */}
+                    {czyCzyszczenieBazy && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+                                <div className="flex gap-3 items-start text-amber-500">
+                                    <Icon name="alert-triangle" className="h-10 w-10 shrink-0 text-amber-500" />
+                                    <div>
+                                        <h3 className="font-bold text-lg text-white">Reset fabryczny</h3>
+                                        <p className="text-sm text-neutral-400 mt-1">
+                                            Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to wyczyszczenie wszystkich pomiarów w aplikacji (i w chmurze, jeśli masz podpięty arkusz).
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 justify-end pt-2">
+                                    <button onClick={() => setCzyCzyszczenieBazy(false)} className="px-4 py-2 text-sm font-medium text-neutral-400 hover:text-white transition">Anuluj</button>
+                                    <button onClick={przywrocUstawieniaFabryczne} className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Przywróć i wyczyść</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NAGŁÓWEK */}
+                    <header className="border-b border-neutral-900 bg-neutral-950/85 backdrop-blur sticky top-0 z-40 px-4 py-3.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="h-9 w-9 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400">
+                                <Icon name="zap" className="h-5 w-5 text-emerald-400" />
+                            </div>
+                            <div>
+                                <h1 className="font-bold text-base tracking-tight leading-none">TRAFO-KABEL</h1>
+                                <span className="text-[10px] text-neutral-500 font-medium tracking-wider uppercase">System Ewidencji Pomiarów</span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                            <button onClick={() => { setAktywnaZakladka('dc'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'dc' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable DC</button>
+                            <button onClick={() => { setAktywnaZakladka('ac'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'ac' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable AC</button>
+                            <button onClick={() => setAktywnaZakladka('sheets')} className={`p-2 rounded-lg transition-colors ${aktywnaZakladka === 'sheets' ? 'bg-emerald-500/10 text-emerald-400' : 'text-neutral-400 hover:text-white'}`} title="Google Sheets Sync"><Icon name="file-spreadsheet" className="h-4 w-4" /></button>
+                            <button onClick={() => setAktywnaZakladka('ustawienia')} className={`p-2 rounded-lg transition-colors ${aktywnaZakladka === 'ustawienia' ? 'bg-emerald-500/10 text-emerald-400' : 'text-neutral-400 hover:text-white'}`} title="Ustawienia projektu"><Icon name="settings" className="h-4 w-4" /></button>
+                        </div>
+                    </header>
+
+                    {/* SZYBKI PRZYCISK ODŚWIEŻANIA W NAGŁÓWKU */}
+                    {sheetWebhookUrl && wybranyTeam && (
+                        <div className="bg-neutral-900 border-b border-neutral-800 px-4 py-2 flex items-center justify-between text-xs">
+                            <span className="text-neutral-400 flex items-center gap-1.5">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Połączono z bazą Google Sheets
+                            </span>
+                            <button 
+                                onClick={pobierzZGoogleSheets} 
+                                className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold rounded-lg transition"
+                            >
+                                <Icon name="refresh-cw" className="h-3 w-3 text-neutral-950" />
+                                ODŚWIEŻ METRY & CONFIG
+                            </button>
+                        </div>
+                    )}
+
+                    {/* GŁÓWNA ZAWARTOŚĆ */}
+                    <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 space-y-6">
+
+                        {/* WIDOK 1: WYBÓR TEAMU */}
+                        {!wybranyTeam && (
+                            <div className="space-y-6">
+                                <div className="text-center space-y-2 py-4">
+                                    <h2 className="text-2xl font-black text-white tracking-tight">KROK 1: WYBÓR ZESPOŁU</h2>
+                                    <p className="text-sm text-neutral-400 max-w-md mx-auto">Wybierz swój zespół roboczy, aby rozpocząć ewidencjonowanie pomiarów kabli na budowie.</p>
+                                </div>
+
+                                {sheetWebhookUrl && (
+                                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-2xl flex items-center justify-between text-xs font-semibold">
+                                        <span>Masz podpięty arkusz. Przed wyborem zespołu zalecamy pobrać najnowszy stan.</span>
+                                        <button onClick={pobierzZGoogleSheets} className="flex items-center gap-1.5 bg-emerald-500 text-black px-3 py-1.5 rounded-xl font-extrabold hover:bg-emerald-400 transition">
+                                            <Icon name="refresh-cw" className="h-3 w-3 text-black" /> Pobierz dane
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="grid gap-3">
+                                    {Array.from({ length: konfig.iloscTeamow }).map((_, i) => {
+                                        const nazwaTeamu = 'Team ' + (i + 1);
+                                        const sumaDC = obliczSumeTeam(nazwaTeamu, 'DC');
+                                        const sumaAC = obliczSumeTeam(nazwaTeamu, 'AC');
+
+                                        return (
+                                            <button key={nazwaTeamu} onClick={() => { setWybranyTeam(nazwaTeamu); pokazPowiadomienie('Zalogowano jako ' + nazwaTeamu, 'success'); }} className="group w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between text-left transition-all">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="h-12 w-12 bg-neutral-950 rounded-xl flex items-center justify-center text-emerald-400 font-black text-lg group-hover:bg-emerald-500 group-hover:text-black transition-colors">T{i + 1}</div>
+                                                    <div>
+                                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Zespół Roboczy</span>
+                                                        <h3 className="font-extrabold text-lg text-white leading-tight group-hover:text-emerald-400 transition-colors">{nazwaTeamu}</h3>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Suma dzisiaj</div>
+                                                    <div className="text-sm font-black text-emerald-400">{(sumaDC + sumaAC).toFixed(2)} m</div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* RAPORT DZIENNY */}
+                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
+                                    <div className="flex items-center gap-2 text-emerald-400">
+                                        <Icon name="calendar" className="h-5 w-5 text-emerald-400" />
+                                        <h3 className="font-black text-sm tracking-widest uppercase">Dzienny Raport Zużycia Kabla</h3>
+                                    </div>
+                                    <p className="text-xs text-neutral-400">Poniższe zestawienie pokazuje sumaryczne zużycie w podziale na dni robocze dla każdego zespołu.</p>
+
+                                    <div className="bg-neutral-950 border border-neutral-900 rounded-2xl p-4 space-y-3">
+                                        <div className="flex justify-between items-center pb-2 border-b border-neutral-900">
+                                            <span className="text-xs font-bold text-neutral-300">Dzisiejsza data ({new Date().toLocaleDateString('pl-PL')})</span>
+                                            <span className="text-xs font-extrabold text-emerald-400">Suma: {(obliczSumeCalkowita('DC') + obliczSumeCalkowita('AC')).toFixed(2)} m</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {Array.from({ length: konfig.iloscTeamow }).map((_, i) => {
+                                                const nazwaTeamu = 'Team ' + (i + 1);
+                                                const sumaDC = obliczSumeTeam(nazwaTeamu, 'DC');
+                                                const sumaAC = obliczSumeTeam(nazwaTeamu, 'AC');
+                                                const procent = (obliczSumeCalkowita('DC') + obliczSumeCalkowita('AC')) > 0 
+                                                    ? ((sumaDC + sumaAC) / (obliczSumeCalkowita('DC') + obliczSumeCalkowita('AC'))) * 100 
+                                                    : 0;
+
+                                                return (
+                                                    <div key={nazwaTeamu} className="space-y-1.5">
+                                                        <div className="flex justify-between text-xs">
+                                                            <span className="text-neutral-400 font-medium flex items-center gap-1.5">
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                                                {nazwaTeamu}
+                                                            </span>
+                                                            <span className="font-bold text-neutral-200">{(sumaDC + sumaAC).toFixed(2)} m</span>
+                                                        </div>
+                                                        <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: procent + '%' }}></div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* WIDOK 2: WIDOK GŁÓWNY TEAMU */}
+                        {wybranyTeam && !wybranyFalownik && (
+                            <div className="space-y-6">
+                                <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+                                    <button onClick={() => setWybranyTeam(null)} className="flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-white transition">
+                                        <Icon name="arrow-left" className="h-4 w-4" /> Wróć do Zespołów
+                                    </button>
+                                    <div className="text-xs bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-full text-neutral-400 flex items-center gap-2">
+                                        Zalogowany: <span className="text-emerald-400 font-extrabold">{wybranyTeam}</span>
+                                        <span className="h-1 w-1 bg-neutral-700 rounded-full" />
+                                        Suma zespołu ({aktywnaZakladka.toUpperCase()}): <span className="text-white font-extrabold">{obliczSumeTeam(wybranyTeam, aktywnaZakladka === 'dc' ? 'DC' : 'AC').toFixed(2)} m</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
+                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">SUMA CAŁKOWITA ({aktywnaZakladka.toUpperCase()})</span>
+                                        <div className="text-2xl font-black text-emerald-400 tracking-tight mt-1">
+                                            {obliczSumeCalkowita(aktywnaZakladka === 'dc' ? 'DC' : 'AC').toFixed(2)} m
+                                        </div>
+                                    </div>
+                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">TRYB PRACY (DC)</span>
+                                            <div className="text-sm font-extrabold text-white flex items-center gap-1.5 mt-1">
+                                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                {aktywnaZakladka === 'dc' ? 'DC: ' + konfig.trybPracy : 'AC Obwody'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* FILTRY TRAFOSTACJI */}
+                                <div className="space-y-2">
+                                    <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">FILTR TRAFOSTACJI (ZUŻYCIE {aktywnaZakladka.toUpperCase()})</span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {konfig.trafos.map(t => {
+                                            const sumaT = obliczSumeTrafo(t.id, aktywnaZakladka === 'dc' ? 'DC' : 'AC');
+                                            return (
+                                                <button key={t.id} onClick={() => setWybraneTrafo(t.id)} className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${wybraneTrafo === t.id ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/10' : 'bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400'}`}>
+                                                    Trafo {t.id} ({sumaT.toFixed(2)} m)
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* LISTA FALOWNIKÓW */}
+                                <div className="space-y-3">
+                                    <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">WYBÓR FALOWNIKA (WR) DLA TRAFO {wybraneTrafo}</span>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {Array.from({ length: (konfig.trafos.find(function(t) { return t.id === wybraneTrafo; }) || {}).falowniki || 12 }).map((_, idx) => {
+                                            const wrIndex = idx + 1;
+                                            const wrKod = 'WR ' + wybraneTrafo + '.' + wrIndex;
+                                            const sumaFalownika = obliczSumeFalownika(wrKod, aktywnaZakladka === 'dc' ? 'DC' : 'AC');
+                                            const autorzy = pobierzAutorowWR(wrKod, aktywnaZakladka === 'dc' ? 'DC' : 'AC');
+                                            
+                                            const mamWpis = autorzy.includes(wybranyTeam);
+                                            const ktosInnyWpisal = autorzy.some(function(a) { return a !== wybranyTeam; });
+
+                                            let stylKafli = "border-neutral-800 bg-neutral-900/40 hover:bg-neutral-900";
+                                            if (mamWpis && ktosInnyWpisal) {
+                                                stylKafli = "border-amber-500/50 bg-amber-950/10 hover:bg-amber-950/20";
+                                            } else if (mamWpis) {
+                                                stylKafli = "border-emerald-500/40 bg-emerald-950/5 hover:bg-emerald-950/10";
+                                            } else if (ktosInnyWpisal) {
+                                                stylKafli = "border-amber-600/30 bg-amber-950/5 hover:bg-amber-950/10";
+                                            }
+
+                                            return (
+                                                <button key={wrKod} onClick={() => setWybranyFalownik(wrKod)} className={`group border rounded-2xl p-4 text-left transition-all relative overflow-hidden ${stylKafli}`}>
+                                                    {mamWpis && ktosInnyWpisal && (
+                                                        <span className="absolute top-2 right-2 flex h-2 w-2">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                                        </span>
+                                                    )}
+                                                    {mamWpis && !ktosInnyWpisal && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-500" />}
+
+                                                    <span className="text-xs font-extrabold text-white block group-hover:text-emerald-400 transition-colors">{wrKod}</span>
+                                                    <div className="mt-3">
+                                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Zużycie kabla</span>
+                                                        <span className="text-base font-black text-white group-hover:text-emerald-400 transition-colors">{sumaFalownika.toFixed(2)} m</span>
+                                                    </div>
+
+                                                    {autorzy.length > 0 && (
+                                                        <div className="mt-2 pt-2 border-t border-neutral-800/50 text-[9px] text-neutral-400 flex flex-wrap gap-1 items-center">
+                                                            <span>Zapis:</span>
+                                                            {autorzy.map(function(aut) {
+                                                                return (
+                                                                    <span key={aut} className={`px-1.5 py-0.5 rounded ${aut === wybranyTeam ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                                                                        {aut}
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* WIDOK 3: FORMULARZ WPISYWANIA METRÓW */}
+                        {wybranyTeam && wybranyFalownik && (
+                            <div className="space-y-6">
+                                {pobierzAutorowWR(wybranyFalownik, aktywnaZakladka === 'dc' ? 'DC' : 'AC').some(function(a) { return a !== wybranyTeam; }) && (
+                                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-2xl flex gap-3">
+                                        <Icon name="alert-triangle" className="h-5 w-5 shrink-0 mt-0.5 text-amber-400" />
+                                        <div className="text-xs space-y-1">
+                                            <h4 className="font-extrabold uppercase tracking-wide">TRYB WSPÓŁDZIELONY (INNY TEAM TU WPISYWAŁ)</h4>
+                                            <p className="text-neutral-300">
+                                                Inny zespół wprowadził już pomiary dla tego falownika. Widzisz ich bębny i stringi. Możesz dodać kolejny bęben dla swojego teamu lub edytować istniejące wartości.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between items-center">
+                                    <button onClick={() => setWybranyFalownik(null)} className="flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-white transition">
+                                        <Icon name="arrow-left" className="h-4 w-4" /> Wróć do Falowników
+                                    </button>
+                                    <span className="text-xs bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-emerald-400 rounded-full font-extrabold">{wybranyFalownik}</span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
+                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Suma Falownika {wybranyFalownik}</span>
+                                        <div className="text-2xl font-black text-emerald-400 tracking-tight mt-1">
+                                            {formularzWpisow.reduce(function(sum, w) { return sum + w.zuzycie; }, 0).toFixed(2)} m
+                                        </div>
+                                    </div>
+                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
+                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Bieżący Zespół</span>
+                                        <div className="text-lg font-extrabold text-white mt-1">{wybranyTeam}</div>
+                                    </div>
+                                </div>
+
+                                {/* FORMULARZ */}
+                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
+                                    <div className="flex justify-between items-center pb-3 border-b border-neutral-800">
+                                        <h3 className="font-black text-sm tracking-wider uppercase text-white">Wpisy Pomiarowe dla {wybranyFalownik}</h3>
+                                        <span className="text-[10px] text-neutral-500 font-extrabold uppercase">
+                                            {aktywnaZakladka === 'dc' ? 'Tryb ' + konfig.trybPracy.toUpperCase() : 'Tryb AC'}
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        {formularzWpisow.map((wpis, index) => {
+                                            const toMójZapis = wpis.team === wybranyTeam;
+                                            const borderKola = toMójZapis ? 'border-emerald-500/30 bg-neutral-950' : 'border-amber-500/50 bg-amber-950/10';
+
+                                            return (
+                                                <div key={wpis.id} className={`border rounded-2xl p-4 space-y-4 transition ${borderKola}`}>
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-extrabold text-sm text-white">{wpis.numer.toUpperCase()}</span>
+                                                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${toMójZapis ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                                                                {toMójZapis ? 'Mój zespół' : 'Zapis: ' + wpis.team}
+                                                            </span>
+                                                        </div>
+                                                        {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && index > 0 && (
+                                                            <button onClick={() => usunBeben(index)} className="p-1 text-neutral-500 hover:text-red-400 transition">
+                                                                <Icon name="trash-2" className="h-4 w-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && (
+                                                            <div className="space-y-1">
+                                                                <label className="text-[10px] text-neutral-500 font-bold uppercase block">Dł. Całkowita</label>
+                                                                <input type="number" value={wpis.dlugosc || ''} onChange={(e) => zmienWpisFormularza(index, 'dlugosc', e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" placeholder="500" />
+                                                            </div>
+                                                        )}
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] text-neutral-500 font-bold uppercase block">Start (m)</label>
+                                                            <input type="number" value={wpis.start || ''} onChange={(e) => zmienWpisFormularza(index, 'start', e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] text-neutral-500 font-bold uppercase block">Koniec (m)</label>
+                                                            <input type="number" value={wpis.koniec || ''} onChange={(e) => zmienWpisFormularza(index, 'koniec', e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex justify-between items-center text-xs pt-1">
+                                                        <div className="flex gap-2">
+                                                            <span className="text-neutral-500">ZUŻYCIE:</span>
+                                                            <span className="font-extrabold text-emerald-400">{wpis.zuzycie.toFixed(2)} m</span>
+                                                        </div>
+                                                        {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && (
+                                                            <div className="flex gap-2">
+                                                                <span className="text-neutral-500">ZAPAS (POZOSTAŁO):</span>
+                                                                <span className="font-extrabold text-sky-400">{wpis.zapas.toFixed(2)} m</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && (
+                                        <button onClick={dodajKolejnyBeben} className="w-full mt-2 py-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs font-bold text-neutral-300 rounded-2xl flex items-center justify-center gap-2">
+                                            <Icon name="plus" className="h-4 w-4 text-emerald-400" /> Dodaj kolejny Bęben
+                                        </button>
+                                    )}
+                                </div>
+
+                                <button onClick={zapiszFormularz} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-3xl font-black tracking-widest text-sm flex items-center justify-center gap-2 shadow-xl">
+                                    <Icon name="database" className="h-5 w-5" /> ZAPISZ LOKALNIE
+                                </button>
+                            </div>
+                        )}
+
+                        {/* WIDOK 4: USTAWIENIA */}
+                        {aktywnaZakladka === 'ustawienia' && (
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-2.5">
+                                    <Icon name="sliders" className="h-6 w-6 text-emerald-400" />
+                                    <h2 className="text-xl font-black text-white tracking-tight">LOKALNA KONFIGURACJA SEKCJI</h2>
+                                </div>
+                                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-2xl text-xs space-y-1">
+                                    <span className="font-extrabold block">UWAGA!</span>
+                                    <p>Ta konfiguracja zostanie nadpisana automatycznie po kliknięciu "Odśwież", jeśli podepniesz arkusz webhook. Strukturę budowy ustawia się centralnie w zakładce <strong>Konfiguracja</strong> Arkusza Google.</p>
+                                </div>
+
+                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider block">Tryb Pracy (DC)</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button onClick={() => zapiszKonfiguracje(Object.assign({}, konfig, { trybPracy: 'Bębny' }))} className={`py-3 rounded-xl text-xs font-bold border ${konfig.trybPracy === 'Bębny' ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800'}`}>Tryb Bębnów</button>
+                                            <button onClick={() => zapiszKonfiguracje(Object.assign({}, konfig, { trybPracy: 'Stringi' }))} className={`py-3 rounded-xl text-xs font-bold border ${konfig.trybPracy === 'Stringi' ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800'}`}>Tryb Stringów</button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] text-neutral-400 font-bold uppercase block">Ilość Zespołów Roboczych (Teamów)</label>
+                                        <input type="number" min="1" max="10" value={konfig.iloscTeamow} onChange={(e) => zapiszKonfiguracje(Object.assign({}, konfig, { iloscTeamow: Math.max(1, parseInt(e.target.value) || 2) }))} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-white" />
+                                    </div>
+
+                                    <div className="space-y-3 pt-2">
+                                        <span className="text-[10px] text-neutral-400 font-bold uppercase block">Rozkład stacji i falowników</span>
+                                        <div className="space-y-2.5">
+                                            {konfig.trafos.map((t, idx) => (
+                                                <div key={t.id} className="bg-neutral-950 border border-neutral-850 p-4 rounded-2xl grid grid-cols-3 gap-3 items-center">
+                                                    <div className="text-xs font-bold text-white">Trafo {t.id}</div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[9px] text-neutral-500 font-bold uppercase block">Inwertery (WR)</label>
+                                                        <input type="number" value={t.falowniki} onChange={(e) => {
+                                                            const kopia = [...konfig.trafos];
+                                                            kopia[idx].falowniki = Math.max(1, parseInt(e.target.value) || 1);
+                                                            zapiszKonfiguracje(Object.assign({}, konfig, { trafos: kopia }));
+                                                        }} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1 text-xs text-white" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[9px] text-neutral-500 font-bold uppercase block">Ilość stringów</label>
+                                                        <input type="number" value={t.stringi} onChange={(e) => {
+                                                            const kopia = [...konfig.trafos];
+                                                            kopia[idx].stringi = Math.max(1, parseInt(e.target.value) || 1);
+                                                            zapiszKonfiguracje(Object.assign({}, konfig, { trafos: kopia }));
+                                                        }} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1 text-xs text-white" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button onClick={() => setCzyCzyszczenieBazy(true)} className="w-full bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 py-4 rounded-3xl font-black tracking-widest text-sm transition-all">
+                                    PRZYWRÓĆ USTAWIENIA FABRYCZNE (I WYCZYŚĆ ARKUSZ)
+                                </button>
+                            </div>
+                        )}
+
+                        {/* WIDOK 5: GOOGLE SHEETS */}
+                        {aktywnaZakladka === 'sheets' && (
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-2.5">
+                                    <Icon name="file-spreadsheet" className="h-6 w-6 text-emerald-400" />
+                                    <h2 className="text-xl font-black text-white tracking-tight">ARKUSZ GOOGLE (PEŁNY SYNC)</h2>
+                                </div>
+
+                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] text-neutral-400 font-bold uppercase block">Google Apps Script Webhook URL</label>
+                                        <input type="url" value={sheetWebhookUrl} onChange={(e) => setSheetWebhookUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-white font-mono" />
+                                    </div>
+
+                                    {statusSynchronizacji && (
+                                        <div className="p-3 bg-neutral-950 rounded-xl text-xs font-bold text-emerald-400 border border-neutral-850">
+                                            Status: {statusSynchronizacji}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                        <button onClick={eksportujDoGoogleSheets} className="bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-2xl text-xs font-black tracking-widest uppercase transition flex items-center justify-center gap-2">
+                                            <Icon name="refresh-cw" className="h-4 w-4 text-black" /> Wyślij (Zapisz)
+                                        </button>
+                                        <button onClick={pobierzZGoogleSheets} className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-850 text-neutral-300 py-3 rounded-2xl text-xs font-black tracking-widest uppercase transition flex items-center justify-center gap-2">
+                                            <Icon name="refresh-cw" className="h-4 w-4 text-emerald-400" /> Odśwież (Pobierz)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* INSTRUKCJA GOOGLE APPS SCRIPT DLA PEŁNEJ SYNCHRONIZACJI */}
+                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
+                                    <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
+                                        <Icon name="info" className="h-4 w-4 text-emerald-400" />
+                                        INSTRUKCJA I POPRAWIONY KOD APPS SCRIPT
+                                    </h3>
+                                    <p className="text-xs text-neutral-400 leading-relaxed">
+                                        Wklej ten zaktualizowany kod w Apps Script w swoim arkuszu. Zapewnia on pełne, dwukierunkowe wczytywanie konfiguracji oraz pomiarów wszystkich zespołów!
+                                    </p>
+                                    <pre className="bg-neutral-950 border border-neutral-850 p-4 rounded-xl text-[10px] text-neutral-300 overflow-x-auto font-mono max-h-60 select-all">
+{`function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. Pobieranie konfiguracji
+  var sheetConfig = ss.getSheetByName("Konfiguracja");
+  if (!sheetConfig) {
+    return ContentService.createTextOutput(JSON.stringify({ error: "Brak zakladki Konfiguracja" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  var trybPracy = sheetConfig.getRange("B1").getValue() || "Bębny";
+  var iloscTeamow = sheetConfig.getRange("B2").getValue() || 2;
+  
+  var trafos = [];
+  var lastRowConfig = sheetConfig.getLastRow();
+  for (var i = 5; i <= lastRowConfig; i++) {
+    var trafoId = sheetConfig.getRange(i, 1).getValue();
+    var falowniki = sheetConfig.getRange(i, 2).getValue();
+    var stringi = sheetConfig.getRange(i, 3).getValue();
+    if (trafoId !== "") {
+      trafos.push({
+        id: parseInt(trafoId),
+        falowniki: parseInt(falowniki) || 12,
+        stringi: parseInt(stringi) || 12
+      });
     }
-
-    // --- 2. ODCZYT WPISÓW ROBOCZYCH ---
-    var mainSheet = ss.getSheetByName("Pomiary") || ss.getActiveSheet();
-    if (mainSheet.getName() === "Konfiguracja") {
-      mainSheet = ss.getSheetByName("Pomiary") || ss.insertSheet("Pomiary");
-    }
-
-    var records = [];
-    if (mainSheet.getLastRow() > 1) {
-      var recordValues = mainSheet.getRange(2, 1, mainSheet.getLastRow() - 1, 12).getValues();
-      for (var k = 0; k < recordValues.length; k++) {
-        records.push({
-          id: recordValues[k][0],
-          timestamp: recordValues[k][1],
-          team: recordValues[k][2],
-          workMode: recordValues[k][3],
-          trafoNo: recordValues[k][4],
-          inverter: recordValues[k][5],
-          identifier: recordValues[k][6],
-          totalLength: recordValues[k][7],
-          startMeter: recordValues[k][8],
-          endMeter: recordValues[k][9],
-          used: recordValues[k][10],
-          remaining: recordValues[k][11]
+  }
+  
+  // 2. Pobieranie wpisów DC (Metry)
+  var sheetDC = ss.getSheetByName("Metry");
+  var metryDC = [];
+  if (sheetDC) {
+    var lastRowDC = sheetDC.getLastRow();
+    if (lastRowDC > 1) {
+      var valuesDC = sheetDC.getRange(2, 1, lastRowDC - 1, 11).getValues();
+      for (var j = 0; j < valuesDC.length; j++) {
+        metryDC.push({
+          ID: valuesDC[j][0],
+          Data_Wpisu: valuesDC[j][1],
+          Trafo: valuesDC[j][2],
+          Team: valuesDC[j][3],
+          WR: valuesDC[j][4],
+          Numer_Bębna_Stringu: valuesDC[j][5],
+          Zuzycie: valuesDC[j][6],
+          Zapas: valuesDC[j][7],
+          Odczyt_start: valuesDC[j][8],
+          Odczyt_Koniec: valuesDC[j][9],
+          Dlugosc_bebna: valuesDC[j][10]
         });
       }
     }
-
-    var response = {
-      status: "success",
-      config: configData,
-      records: records
-    };
-
-    return ContentService.createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
-
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
   }
-}
-
-/**
- * Obsługa żądań POST (Odbiór i nadpisywanie duplikatów)
- */
-function doPost(e) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("Pomiary");
-    if (!sheet) {
-      sheet = ss.insertSheet("Pomiary");
-    }
-    
-    var jsonString = e.postData.contents;
-    var data = JSON.parse(jsonString);
-    
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow([
-        "ID Pomiaru", "Data zapisu", "Team (Zespół)", "Tryb pracy", "Trafostacja", "Falownik (WR)", "Identyfikator (Bęben/String)", "Długość bębna (m)", "Metry początkowe", "Metry końcowe", "Zużyte metry (m)", "Pozostało na bębnie (m)"
-      ]);
-      
-      var headerRange = sheet.getRange(1, 1, 1, 12);
-      headerRange.setFontWeight("bold");
-      headerRange.setBackground("#a3e635");
-      headerRange.setFontColor("#09090b");
-      headerRange.setHorizontalAlignment("center");
-      sheet.setFrozenRows(1);
-    }
-    
-    // Anty-dublowanie na podstawie ID Pomiaru (Kolumna A)
-    var dataRange = sheet.getDataRange();
-    var values = dataRange.getValues();
-    var idToFind = data.id || "";
-    var rowToUpdate = -1;
-    
-    if (idToFind !== "") {
-      for (var i = 1; i < values.length; i++) {
-        if (values[i][0] === idToFind) { 
-          rowToUpdate = i + 1;
-          break;
-        }
+  
+  // 3. Pobieranie wpisów AC (Metry AC)
+  var sheetAC = ss.getSheetByName("Metry AC");
+  var metryAC = [];
+  if (sheetAC) {
+    var lastRowAC = sheetAC.getLastRow();
+    if (lastRowAC > 1) {
+      var valuesAC = sheetAC.getRange(2, 1, lastRowAC - 1, 8).getValues();
+      for (var k = 0; k < valuesAC.length; k++) {
+        metryAC.push({
+          ID: valuesAC[k][0],
+          Data_Wpisu: valuesAC[k][1],
+          Trafo: valuesAC[k][2],
+          Team: valuesAC[k][3],
+          WR: valuesAC[k][4],
+          Zuzycie: valuesAC[k][5],
+          Odczyt_start: valuesAC[k][6],
+          Odczyt_Koniec: valuesAC[k][7],
+          Numer_Elementu: valuesAC[k][8] || "Kabel AC"
+        });
       }
     }
-    
-    var recordData = [
-      data.id || "",
-      data.timestamp || new Date().toLocaleString("pl-PL"),
-      data.team || "",
-      data.workMode || "",
-      data.trafoNo || "",
-      data.inverter || "",
-      data.identifier || "",
-      data.totalLength || 0,
-      data.startMeter || 0,
-      data.endMeter || 0,
-      data.used || 0,
-      data.remaining || 0
-    ];
-    
-    if (rowToUpdate !== -1) {
-      var targetRange = sheet.getRange(rowToUpdate, 1, 1, 12);
-      targetRange.setValues([recordData]);
-    } else {
-      sheet.appendRow(recordData);
+  }
+  
+  var response = {
+    konfiguracja: {
+      trybPracy: trybPracy,
+      iloscTeamow: parseInt(iloscTeamow),
+      trafos: trafos
+    },
+    metryDC: metryDC,
+    metryAC: metryAC
+  };
+  
+  return ContentService.createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var postData = JSON.parse(e.postData.contents);
+  
+  // Jeśli żądanie dotyczy pełnego resetu bazy
+  if (postData.action === 'clear_database') {
+    var sConfig = ss.getSheetByName("Konfiguracja");
+    if (sConfig) {
+      sConfig.getRange("B1").setValue("Bębny");
+      sConfig.getRange("B2").setValue(2);
+      // resetowanie tabeli trafo
+      sConfig.getRange("A5:C100").clearContent();
+      sConfig.getRange("A5").setValue(1);
+      sConfig.getRange("B5").setValue(12);
+      sConfig.getRange("C5").setValue(12);
     }
     
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
-      
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+    var sDC = ss.getSheetByName("Metry");
+    if (sDC) {
+      sDC.clear();
+      sDC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Numer_Bębna_Stringu", "Zuzycie", "Zapas", "Odczyt_start", "Odczyt_Koniec", "Dlugosc_bebna"]);
+    }
+    
+    var sAC = ss.getSheetByName("Metry AC");
+    if (sAC) {
+      sAC.clear();
+      sAC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Zuzycie", "Odczyt_start", "Odczyt_Koniec", "Numer_Elementu"]);
+    }
+    
+    return ContentService.createTextOutput("Wyczyszczono").setMimeType(ContentService.MimeType.TEXT);
   }
-}
+  
+  // Normalny zapis danych (Metry i Metry AC)
+  var sheetDC = ss.getSheetByName("Metry") || ss.insertSheet("Metry");
+  sheetDC.clear();
+  sheetDC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Numer_Bębna_Stringu", "Zuzycie", "Zapas", "Odczyt_start", "Odczyt_Koniec", "Dlugosc_bebna"]);
+  
+  if (postData.metryDC && postData.metryDC.length > 0) {
+    postData.metryDC.forEach(function(row) {
+      sheetDC.appendRow([
+        row.ID,
+        row.Data_Wpisu,
+        row.Trafo,
+        row.Team,
+        row.WR,
+        row.Numer_Bębna_Stringu,
+        row.Zuzycie,
+        row.Zapas,
+        row.Odczyt_start,
+        row.Odczyt_Koniec,
+        row.Dlugosc_bebna
+      ]);
+    });
+  }
+  
+  var sheetAC = ss.getSheetByName("Metry AC") || ss.insertSheet("Metry AC");
+  sheetAC.clear();
+  sheetAC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Zuzycie", "Odczyt_start", "Odczyt_Koniec", "Numer_Elementu"]);
+  
+  if (postData.metryAC && postData.metryAC.length > 0) {
+    postData.metryAC.forEach(function(row) {
+      sheetAC.appendRow([
+        row.ID,
+        row.Data_Wpisu,
+        row.Trafo,
+        row.Team,
+        row.WR,
+        row.Zuzycie,
+        row.Odczyt_start,
+        row.Odczyt_Koniec,
+        row.Numer_Elementu || "Kabel AC"
+      ]);
+    });
+  }
+  
+  return ContentService.createTextOutput("Zapisano pomyślnie").setMimeType(ContentService.MimeType.TEXT);
+}`}
+                                    </pre>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    <footer className="border-t border-neutral-900 bg-neutral-950 py-6 px-4 text-center text-xs text-neutral-600">
+                        <div>System Ewidencji Okablowania Budowy</div>
+                        <div className="mt-1 font-medium text-[10px] text-neutral-500 uppercase tracking-widest">Dostosowane do ekranów telefonów w 100%</div>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
