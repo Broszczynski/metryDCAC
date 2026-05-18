@@ -1,1235 +1,1204 @@
 <!DOCTYPE html>
 <html lang="pl" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TRAFO-KABEL - System Ewidencji Pomiarów</title>
-    
-    <!-- Tailwind CSS dla stylizacji Premium Dark Mode -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        neutral: {
-                            950: '#0a0a0a',
-                        }
-                    }
-                }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PV Cable Tracker - Ewidencja Zużycia Kabla DC</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            neon: {
+              DEFAULT: '#10b981', // emerald-500
+              glow: '#34d399',    // emerald-400
+              dark: '#064e3b'     // emerald-900
             }
+          },
+          boxShadow: {
+            'neon-glow': '0 0 15px rgba(16, 185, 129, 0.35)',
+            'neon-glow-lg': '0 0 25px rgba(16, 185, 129, 0.5)',
+            'amber-glow': '0 0 15px rgba(245, 158, 11, 0.25)'
+          }
         }
-    </script>
-    
-    <!-- React & ReactDOM (Uruchamiane bezpośrednio z CDN) -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Babel compiler do uruchamiania JSX bezpośrednio w przeglądarce -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- Ikony Lucide -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0a0a0a;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #262626;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #10b981;
-        }
-    </style>
-</head>
-<body class="bg-neutral-950 text-neutral-100 min-h-screen antialiased">
-
-    <!-- Kontener montowania aplikacji React -->
-    <div id="root"></div>
-
-    <!-- Kod aplikacji React napisany w standardzie JSX -->
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-
-        // Fabryczna konfiguracja startowa - 4 Trafostacje, 21 stringów na każdym falowniku
-        const DOMYSLNA_KONFIGURACJA = {
-          trybPracy: 'Bębny',
-          iloscTeamow: 2,
-          trafos: [
-            { id: 1, falowniki: 12, stringi: 21 },
-            { id: 2, falowniki: 12, stringi: 21 },
-            { id: 3, falowniki: 12, stringi: 21 },
-            { id: 4, falowniki: 14, stringi: 21 }
-          ]
-        };
-
-        // Pomocniczy komponent do renderowania ikon Lucide bezpośrednio w React
-        function Icon({ name, className }) {
-            const classVal = className || "h-5 w-5";
-            const elRef = useRef(null);
-            useEffect(() => {
-                if (elRef.current) {
-                    elRef.current.innerHTML = '';
-                    const map = {};
-                    map[name] = name;
-                    const icon = lucide.createIcons({
-                        attrs: { class: classVal },
-                        nameMap: map
-                    });
-                    const svg = document.createElement('i');
-                    svg.setAttribute('data-lucide', name);
-                    elRef.current.appendChild(svg);
-                    lucide.createIcons({ node: elRef.current });
-                }
-            }, [name, classVal]);
-            return <span ref={elRef} className="inline-flex items-center justify-center"></span>;
-        }
-
-        function App() {
-            // --- STANY SYSTEMOWE ---
-            const [wybranyTeam, setWybranyTeam] = useState(null); 
-            const [aktywnaZakladka, setAktywnaZakladka] = useState('dc'); // 'dc' lub 'ac'
-            const [wybraneTrafo, setWybraneTrafo] = useState(1); 
-            const [wybranyFalownik, setWybranyFalownik] = useState(null); 
-            
-            // Konfiguracja projektu pobierana wyłącznie z arkusza (lub domyślna przy braku sieci)
-            const [konfig, setKonfig] = useState(() => {
-                const lokalny = localStorage.getItem('kabel_konfig');
-                return lokalny ? JSON.parse(lokalny) : DOMYSLNA_KONFIGURACJA;
-            });
-            
-            // Metry (baza wszystkich wpisów pomiarowych pobierana bezpośrednio z Google Sheets)
-            const [pomiary, setPomiary] = useState(() => {
-                const lokalne = localStorage.getItem('kabel_pomiary');
-                return lokalne ? JSON.parse(lokalne) : [];
-            });
-            
-            // Formularz wpisów dla aktualnie wybranego falownika (WR)
-            const [formularzWpisow, setFormularzWpisow] = useState([]);
-            
-            // Google Sheets URL wczytywany i zapisywany bezpośrednio w localStorage
-            const [sheetWebhookUrl, setSheetWebhookUrl] = useState(() => {
-                return localStorage.getItem('kabel_sheet_url') || '';
-            });
-            
-            // Stany ładowania / synchronizacji
-            const [statusSynchronizacji, setStatusSynchronizacji] = useState('');
-            const [czyTrwaSync, setCzyTrwaSync] = useState(false);
-            const [instrukcjaRozwiniecie, setInstrukcjaRozwiniecie] = useState(false);
-            
-            // Powiadomienia
-            const [powiadomienie, setPowiadomienie] = useState(null);
-            const [czyCzyszczenieBazy, setCzyCzyszczenieBazy] = useState(false);
-
-            // Zapisz konfigurację lokalnie przy zmianach (jako kopia zapasowa)
-            const zapiszKonfiguracje = (nowyKonfig) => {
-                setKonfig(nowyKonfig);
-                localStorage.setItem('kabel_konfig', JSON.stringify(nowyKonfig));
-            };
-
-            // Zapisz pomiary lokalnie przy zmianach (jako kopia zapasowa)
-            const zapiszPomiary = (nowePomiary) => {
-                setPomiary(nowePomiary);
-                localStorage.setItem('kabel_pomiary', JSON.stringify(nowePomiary));
-            };
-
-            // Zapisz sam link Apps Script Webhook
-            const zapiszWebhookUrl = (url) => {
-                setSheetWebhookUrl(url);
-                localStorage.setItem('kabel_sheet_url', url);
-            };
-
-            // --- FUNKCJA POWIADOMIENIA ---
-            const pokazPowiadomienie = (komunikat, typ) => {
-                const t = typ || 'info';
-                setPowiadomienie({ tekst: komunikat, typ: t });
-                setTimeout(() => {
-                    setPowiadomienie(null);
-                }, 4000);
-            };
-
-            // --- AUTOMATYCZNE POBRANIE DANYCH PRZY STARCIE ---
-            useEffect(() => {
-                if (sheetWebhookUrl) {
-                    pobierzZGoogleSheets(true); // Cichy import przy uruchomieniu
-                }
-            }, []);
-
-            // --- INICJALIZACJA I OBSŁUGA FORMULARZA ---
-            useEffect(() => {
-                if (!wybranyFalownik) return;
-
-                const typKabla = aktywnaZakladka === 'dc' ? 'DC' : 'AC';
-                const dopasowanePomiary = pomiary.filter(function(p) {
-                    return p.wr === wybranyFalownik && p.typ === typKabla;
-                });
-
-                if (aktywnaZakladka === 'dc') {
-                    if (konfig.trybPracy === 'Bębny') {
-                        if (dopasowanePomiary.length > 0) {
-                            const zaladowane = dopasowanePomiary.map(function(p) {
-                                return {
-                                    id: p.id,
-                                    dlugosc: p.dlugosc_bebna !== undefined ? p.dlugosc_bebna : 500,
-                                    start: p.start,
-                                    koniec: p.koniec,
-                                    zuzycie: p.zuzycie,
-                                    zapas: p.zapas,
-                                    team: p.team,
-                                    numer: p.numer_elementu
-                                };
-                            });
-                            setFormularzWpisow(zaladowane);
-                        } else {
-                            setFormularzWpisow([{
-                                id: 'beben-1-' + Date.now(),
-                                dlugosc: 500,
-                                start: 0,
-                                koniec: 0,
-                                zuzycie: 0,
-                                zapas: 500,
-                                team: wybranyTeam,
-                                numer: 'Bęben #1'
-                            }]);
-                        }
-                    } else {
-                        // STRINGI (DC)
-                        const trafoObj = konfig.trafos.find(function(t) { return t.id === wybraneTrafo; });
-                        const maxStringi = trafoObj ? trafoObj.stringi : 21;
-                        const stringiForm = [];
-                        for (let i = 1; i <= maxStringi; i++) {
-                            const nazwaStringu = 'String #' + i;
-                            const istniejacy = dopasowanePomiary.find(function(p) { return p.numer_elementu === nazwaStringu; });
-                            
-                            stringiForm.push({
-                                id: istniejacy ? istniejacy.id : 'string-' + i + '-' + Date.now(),
-                                start: istniejacy ? istniejacy.start : 0,
-                                koniec: istniejacy ? istniejacy.koniec : 0,
-                                zuzycie: istniejacy ? istniejacy.zuzycie : 0,
-                                team: istniejacy ? istniejacy.team : wybranyTeam,
-                                numer: nazwaStringu,
-                                zapas: 0
-                            });
-                        }
-                        setFormularzWpisow(stringiForm);
-                    }
-                } else {
-                    // KABLE AC (4 obwody domyślnie na falownik)
-                    const maxObwodyAC = 4;
-                    const acForm = [];
-                    for (let i = 1; i <= maxObwodyAC; i++) {
-                        const nazwaObwodu = 'Obwód AC #' + i;
-                        const istniejacy = dopasowanePomiary.find(function(p) { return p.numer_elementu === nazwaObwodu; });
-                        
-                        acForm.push({
-                            id: istniejacy ? istniejacy.id : 'ac-' + i + '-' + Date.now(),
-                            start: istniejacy ? istniejacy.start : 0,
-                            koniec: istniejacy ? istniejacy.koniec : 0,
-                            zuzycie: istniejacy ? istniejacy.zuzycie : 0,
-                            team: istniejacy ? istniejacy.team : wybranyTeam,
-                            numer: nazwaObwodu,
-                            zapas: 0
-                        });
-                    }
-                    setFormularzWpisow(acForm);
-                }
-            }, [wybranyFalownik, aktywnaZakladka, konfig.trybPracy, pomiary]);
-
-            // --- ZMIANA WPISU W FORMULARZU ---
-            const zmienWpisFormularza = (index, pole, wartosc) => {
-                const kopia = [...formularzWpisow];
-                const wpis = Object.assign({}, kopia[index]);
-                
-                const val = wartosc === '' ? 0 : Math.max(0, parseFloat(wartosc) || 0);
-                wpis[pole] = val;
-
-                if (pole === 'start' || pole === 'koniec' || pole === 'dlugosc') {
-                    const start = pole === 'start' ? val : wpis.start;
-                    const koniec = pole === 'koniec' ? val : wpis.koniec;
-                    const dlugosc = pole === 'dlugosc' ? val : wpis.dlugosc;
-
-                    // Zużycie jako wartość bezwzględna (|start - koniec|)
-                    wpis.zuzycie = Math.abs(start - koniec);
-
-                    // Jeśli długość całkowita to 0, zapas wynosi 0
-                    if (konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc') {
-                        if (dlugosc === 0) {
-                            wpis.zapas = 0;
-                        } else {
-                            wpis.zapas = Math.max(0, dlugosc - wpis.zuzycie);
-                        }
-                    }
-                }
-
-                // Przypisanie do aktualnie edytującego zespołu
-                wpis.team = wybranyTeam;
-
-                kopia[index] = wpis;
-                setFormularzWpisow(kopia);
-            };
-
-            const dodajKolejnyBeben = () => {
-                const kolejnyNumer = formularzWpisow.length + 1;
-                setFormularzWpisow([
-                    ...formularzWpisow,
-                    {
-                        id: 'beben-' + kolejnyNumer + '-' + Date.now(),
-                        dlugosc: 500,
-                        start: 0,
-                        koniec: 0,
-                        zuzycie: 0,
-                        zapas: 500,
-                        team: wybranyTeam,
-                        numer: 'Bęben #' + kolejnyNumer
-                    }
-                ]);
-            };
-
-            const usunBeben = (index) => {
-                if (formularzWpisow.length <= 1) {
-                    pokazPowiadomienie("Musisz zachować co najmniej jeden wpis bębna.", "warning");
-                    return;
-                }
-                const kopia = formularzWpisow.filter(function(_, i) { return i !== index; });
-                const przeliczona = kopia.map(function(b, idx) {
-                    return Object.assign({}, b, {
-                        numer: 'Bęben #' + (idx + 1)
-                    });
-                });
-                setFormularzWpisow(przeliczona);
-            };
-
-            // --- ZAPIS FORMULARZA I EKSPORT INSTANT DO GOOGLE SHEETS ---
-            const zapiszFormularz = async () => {
-                let zaktualizowaneWpisy = [];
-
-                // FILTRACJA: Pomijamy wiersze, które nie mają wprowadzonych pomiarów (zużycie = 0 i odczyty = 0) we wszystkich trybach
-                zaktualizowaneWpisy = formularzWpisow.filter(function(w) {
-                    return w.zuzycie > 0 || w.start > 0 || w.koniec > 0;
-                });
-
-                if (zaktualizowaneWpisy.length === 0) {
-                    pokazPowiadomienie("Brak danych do zapisu. Wpisz odczyty Start i Koniec przed zapisem.", "warning");
-                    return;
-                }
-
-                const sformatowane = zaktualizowaneWpisy.map(function(w) {
-                    return {
-                        id: w.id,
-                        data: new Date().toLocaleString('pl-PL'),
-                        trafo: wybraneTrafo,
-                        team: w.team || wybranyTeam,
-                        wr: wybranyFalownik,
-                        typ: aktywnaZakladka === 'dc' ? 'DC' : 'AC',
-                        numer_elementu: w.numer,
-                        zuzycie: w.zuzycie,
-                        zapas: w.zapas || 0,
-                        start: w.start,
-                        koniec: w.koniec,
-                        dlugosc_bebna: w.dlugosc || 0
-                    };
-                });
-
-                const przefiltrowanaLista = pomiary.filter(function(p) {
-                    return !(p.wr === wybranyFalownik && p.typ === (aktywnaZakladka === 'dc' ? 'DC' : 'AC'));
-                });
-
-                const nowaListaPomiarowa = [...przefiltrowanaLista, ...sformatowane];
-                
-                // Zapis lokalny (zabezpieczenie)
-                zapiszPomiary(nowaListaPomiarowa);
-                setWybranyFalownik(null); // Powrót do ekranu falowników
-                
-                // Automatyczna natychmiastowa wysyłka do Arkusza Google
-                if (sheetWebhookUrl) {
-                    wyslijPomiaryDoArkusza(nowaListaPomiarowa);
-                } else {
-                    pokazPowiadomienie("Brak połączenia! Podaj link Apps Script na stronie startowej.", "warning");
-                }
-            };
-
-            // --- STATYSTYKI POMIARÓW ---
-            const obliczSumeCalkowita = (typ) => {
-                const t = typ || 'DC';
-                return pomiary.filter(function(p) { return p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
-            };
-
-            const obliczSumeTrafo = (trafoId, typ) => {
-                const t = typ || 'DC';
-                return pomiary.filter(function(p) { return p.trafo === trafoId && p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
-            };
-
-            const obliczSumeTeam = (teamName, typ) => {
-                const t = typ || 'DC';
-                return pomiary.filter(function(p) { return p.team === teamName && p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
-            };
-
-            const obliczSumeFalownika = (wrKod, typ) => {
-                const t = typ || 'DC';
-                return pomiary.filter(function(p) { return p.wr === wrKod && p.typ === t; }).reduce(function(sum, p) { return sum + p.zuzycie; }, 0);
-            };
-
-            const pobierzAutorowWR = (wrKod, typ) => {
-                const t = typ || 'DC';
-                const autorzy = pomiary.filter(function(p) { return p.wr === wrKod && p.typ === t; }).map(function(p) { return p.team; });
-                return [...new Set(autorzy)];
-            };
-
-            // --- RESET FABRYCZNY ---
-            const przywrocUstawieniaFabryczne = async () => {
-                zapiszKonfiguracje(DOMYSLNA_KONFIGURACJA);
-                zapiszPomiary([]);
-                setWybranyTeam(null);
-                setWybranyFalownik(null);
-                setWybraneTrafo(1);
-                setAktywnaZakladka('dc');
-                setCzyCzyszczenieBazy(false);
-                
-                if (sheetWebhookUrl) {
-                    setStatusSynchronizacji('Czyszczenie chmury...');
-                    try {
-                        const payload = {
-                            action: 'clear_database',
-                            konfiguracja: DOMYSLNA_KONFIGURACJA,
-                            metryDC: [],
-                            metryAC: []
-                        };
-                        await fetch(sheetWebhookUrl, {
-                            method: 'POST',
-                            mode: 'no-cors',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-                        setStatusSynchronizacji('Wyczyszczono arkusz!');
-                        pokazPowiadomienie("Przywrócono domyślne ustawienia fabryczne i wyczyszczono Arkusz Google!", "success");
-                    } catch (e) {
-                        setStatusSynchronizacji('Błąd czyszczenia');
-                        pokazPowiadomienie("Przywrócono lokalnie, ale nie udało się wyczyścić Arkusza Google.", "warning");
-                    }
-                } else {
-                    pokazPowiadomienie("Przywrócono domyślne ustawienia lokalne.", "success");
-                }
-            };
-
-            // --- ASYNCHRONICZNA METODA POST DO ARKUSZA ---
-            const wyslijPomiaryDoArkusza = async (listaPomiarow) => {
-                if (!sheetWebhookUrl) return;
-                setCzyTrwaSync(true);
-                setStatusSynchronizacji('Zapisywanie...');
-
-                try {
-                    const payload = {
-                        action: 'save_data',
-                        konfiguracja: konfig,
-                        metryDC: listaPomiarow.filter(function(p) { return p.typ === 'DC'; }).map(function(p) {
-                            return {
-                                ID: p.id,
-                                Data_Wpisu: p.data,
-                                Trafo: p.trafo,
-                                Team: p.team,
-                                WR: p.wr,
-                                Numer_Bębna_Stringu: p.numer_elementu,
-                                Zuzycie: p.zuzycie,
-                                Zapas: p.zapas,
-                                Odczyt_start: p.start,
-                                Odczyt_Koniec: p.koniec,
-                                Dlugosc_bebna: p.dlugosc_bebna
-                            };
-                        }),
-                        metryAC: listaPomiarow.filter(function(p) { return p.typ === 'AC'; }).map(function(p) {
-                            return {
-                                ID: p.id,
-                                Data_Wpisu: p.data,
-                                Trafo: p.trafo,
-                                Team: p.team,
-                                WR: p.wr,
-                                Numer_Elementu: p.numer_elementu,
-                                Zuzycie: p.zuzycie,
-                                Odczyt_start: p.start,
-                                Odczyt_Koniec: p.koniec
-                            };
-                        })
-                    };
-
-                    await fetch(sheetWebhookUrl, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    setStatusSynchronizacji('Zapisano!');
-                    setCzyTrwaSync(false);
-                    pokazPowiadomienie("Dane zapisane bezpośrednio w Arkuszu Google!", "success");
-                    
-                    // Po pomyślnym wysłaniu, od razu pobierz aktualny stan dla weryfikacji
-                    pobierzZGoogleSheets(true);
-                } catch (err) {
-                    setStatusSynchronizacji('Błąd wysyłki');
-                    setCzyTrwaSync(false);
-                    pokazPowiadomienie("Błąd zapisu w Arkuszu Google. Sprawdź połączenie.", "error");
-                }
-            };
-
-            // --- METODA GET: POBRANIE NAJNOWSZYCH DANYCH Z GOOGLE SHEETS (Z CACHE-BUSTINGIEM I PARSEREM TEKSTOWYM) ---
-            const pobierzZGoogleSheets = async (cichyImport) => {
-                if (!sheetWebhookUrl) {
-                    if (!cichyImport) {
-                        pokazPowiadomienie("Podaj najpierw poprawny link Apps Script w polu konfiguracji!", "warning");
-                    }
-                    return;
-                }
-                
-                setCzyTrwaSync(true);
-                setStatusSynchronizacji('Pobieranie...');
-                
-                try {
-                    // DODANIE UNIKALNEGO PARAMETRU CZASU, ABY OMINĄĆ AGRESYWNE BUFOROWANIE PRZEKIEROWAŃ GOOGLE
-                    const urlZCacheBusterem = sheetWebhookUrl + (sheetWebhookUrl.indexOf('?') !== -1 ? '&' : '?') + 'action=get_all_data&_t=' + Date.now();
-                    
-                    const response = await fetch(urlZCacheBusterem);
-                    if (!response.ok) {
-                        throw new Error("HTTP Status " + response.status);
-                    }
-                    
-                    // ODBIERANIE ODPOWIEDZI JAKO TEKST, COBY UNIKNĄĆ BŁĘDÓW CORS DLA MIME JSON
-                    const rawText = await response.text();
-                    
-                    if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
-                        throw new Error("Google Apps Script zwrócił błąd HTML zamiast danych. Prawdopodobnie skrypt nie został wdrożony dla opcji 'Każdy' (Anyone)!");
-                    }
-                    
-                    let dane;
-                    try {
-                        dane = JSON.parse(rawText);
-                    } catch(e) {
-                        throw new Error("Nieprawidłowy format JSON ze skryptu Apps Script.");
-                    }
-                    
-                    if (dane && dane.konfiguracja) {
-                        // 1. Dopasowanie i normalizacja Trybu Pracy (Bębny vs Stringi)
-                        const trybRaw = dane.konfiguracja.trybPracy || 'Bębny';
-                        const trybPracyNormalized = (String(trybRaw).toLowerCase().indexOf('bęb') !== -1 || String(trybRaw).toLowerCase().indexOf('beb') !== -1) ? 'Bębny' : 'Stringi';
-                        
-                        const nowaKonfiguracja = {
-                            trybPracy: trybPracyNormalized,
-                            iloscTeamow: parseInt(dane.konfiguracja.iloscTeamow) || 2,
-                            trafos: dane.konfiguracja.trafos && dane.konfiguracja.trafos.length > 0 ? dane.konfiguracja.trafos : DOMYSLNA_KONFIGURACJA.trafos
-                        };
-
-                        zapiszKonfiguracje(nowaKonfiguracja);
-                        
-                        // 2. Pobieranie bazy pomiarów wszystkich ekip
-                        const zaimportowane = [];
-                        if (dane.metryDC) {
-                            dane.metryDC.forEach(function(p) {
-                                zaimportowane.push({
-                                    id: p.ID,
-                                    data: p.Data_Wpisu,
-                                    trafo: parseInt(p.Trafo) || 1,
-                                    team: p.Team,
-                                    wr: p.WR,
-                                    typ: 'DC',
-                                    numer_elementu: p.Numer_Bębna_Stringu,
-                                    zuzycie: parseFloat(p.Zuzycie) || 0,
-                                    zapas: parseFloat(p.Zapas) || 0,
-                                    start: parseFloat(p.Odczyt_start) || 0,
-                                    koniec: parseFloat(p.Odczyt_Koniec) || 0,
-                                    dlugosc_bebna: parseFloat(p.Dlugosc_bebna) || 0
-                                });
-                            });
-                        }
-                        if (dane.metryAC) {
-                            dane.metryAC.forEach(function(p) {
-                                zaimportowane.push({
-                                    id: p.ID,
-                                    data: p.Data_Wpisu,
-                                    trafo: parseInt(p.Trafo) || 1,
-                                    team: p.Team,
-                                    wr: p.WR,
-                                    typ: 'AC',
-                                    numer_elementu: p.Numer_Elementu || 'Kabel AC',
-                                    zuzycie: parseFloat(p.Zuzycie) || 0,
-                                    zapas: 0,
-                                    start: parseFloat(p.Odczyt_start) || 0,
-                                    koniec: parseFloat(p.Odczyt_Koniec) || 0,
-                                    dlugosc_bebna: 0
-                                });
-                            });
-                        }
-                        
-                        zapiszPomiary(zaimportowane);
-                        setStatusSynchronizacji('Zsynchronizowano!');
-                        setCzyTrwaSync(false);
-                        if (!cichyImport) {
-                            pokazPowiadomienie("Zsynchronizowano pomyślnie z Arkuszem Google!", "success");
-                        }
-                    } else {
-                        setCzyTrwaSync(false);
-                        setStatusSynchronizacji('Błąd struktury');
-                    }
-                } catch (err) {
-                    setCzyTrwaSync(false);
-                    setStatusSynchronizacji('Błąd synchronizacji');
-                    if (!cichyImport) {
-                        pokazPowiadomienie(err.message || "Błąd połączenia z Arkuszem Google.", "error");
-                    }
-                }
-            };
-
-            return (
-                <div className="flex flex-col min-h-screen">
-                    
-                    {/* POWIADOMIENIE */}
-                    {powiadomienie && (
-                        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
-                            <Icon name={powiadomienie.typ === 'success' ? 'check' : powiadomienie.typ === 'warning' ? 'alert-triangle' : 'info'} 
-                                  className={powiadomienie.typ === 'success' ? 'text-emerald-400' : powiadomienie.typ === 'warning' ? 'text-amber-400' : 'text-sky-400'} />
-                            <div className="flex-1 text-sm font-medium">{powiadomienie.tekst}</div>
-                        </div>
-                    )}
-
-                    {/* MODAL RESETU */}
-                    {czyCzyszczenieBazy && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
-                                <div className="flex gap-3 items-start text-amber-500">
-                                    <Icon name="alert-triangle" className="h-10 w-10 shrink-0 text-amber-500" />
-                                    <div>
-                                        <h3 className="font-bold text-lg text-white">Reset fabryczny</h3>
-                                        <p className="text-sm text-neutral-400 mt-1">
-                                            Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to wyczyszczenie wszystkich pomiarów w aplikacji oraz wyczyszczenie arkuszy w chmurze Google.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 justify-end pt-2">
-                                    <button onClick={() => setCzyCzyszczenieBazy(false)} className="px-4 py-2 text-sm font-medium text-neutral-400 hover:text-white transition">Anuluj</button>
-                                    <button onClick={przywrocUstawieniaFabryczne} className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Przywróć i wyczyść</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* NAGŁÓWEK */}
-                    <header className="border-b border-neutral-900 bg-neutral-950/85 backdrop-blur sticky top-0 z-40 px-4 py-3.5 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div className="h-9 w-9 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400">
-                                <Icon name="zap" className="h-5 w-5 text-emerald-400" />
-                            </div>
-                            <div>
-                                <h1 className="font-bold text-base tracking-tight leading-none">TRAFO-KABEL</h1>
-                                <span className="text-[10px] text-neutral-500 font-medium tracking-wider uppercase">System Ewidencji Pomiarów</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                            <button onClick={() => { setAktywnaZakladka('dc'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'dc' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable DC</button>
-                            <button onClick={() => { setAktywnaZakladka('ac'); setWybranyFalownik(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-colors ${aktywnaZakladka === 'ac' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-neutral-400 hover:text-white'}`}>Kable AC</button>
-                            
-                            {/* PRZYCISK SZYBKIEGO ODŚWIEŻANIA W NAGŁÓWKU */}
-                            <button 
-                                onClick={() => pobierzZGoogleSheets(false)} 
-                                className="p-2 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center justify-center"
-                                title="Synchronizuj drzewko i metry z Google Sheets"
-                            >
-                                <Icon 
-                                    name="refresh-cw" 
-                                    className={"h-4 w-4 " + (czyTrwaSync ? "animate-spin text-emerald-400" : "")} 
-                                />
-                            </button>
-                        </div>
-                    </header>
-
-                    {/* STATUS SYNCHRONIZACJI W NAGŁÓWKU */}
-                    {sheetWebhookUrl && wybranyTeam && (
-                        <div className="bg-neutral-900 border-b border-neutral-800 px-4 py-2 flex items-center justify-between text-xs">
-                            <span className="text-neutral-400 flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Połączono z Google Sheets (Live)
-                            </span>
-                            <div className="flex items-center gap-1">
-                                <span className="text-neutral-500 uppercase text-[9px]">Status:</span>
-                                <span className="text-emerald-400 font-bold">{statusSynchronizacji || 'Gotowy'}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* GŁÓWNA ZAWARTOŚĆ */}
-                    <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 space-y-6">
-
-                        {/* WIDOK 1: WYBÓR TEAMU */}
-                        {!wybranyTeam && (
-                            <div className="space-y-6">
-                                
-                                {/* GLOBALNE WPISYWANIE LINKU GOOGLE APPS SCRIPT */}
-                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-3.5 shadow-xl">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400">
-                                                <Icon name="file-spreadsheet" className="h-4 w-4" />
-                                            </div>
-                                            <h3 className="text-xs font-black tracking-wider uppercase text-white">Połączenie z bazą Arkusza Google</h3>
-                                        </div>
-                                        {sheetWebhookUrl ? (
-                                            <span className="text-[10px] px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full font-bold uppercase tracking-wider">
-                                                Aktywne
-                                            </span>
-                                        ) : (
-                                            <span className="text-[10px] px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full font-bold uppercase tracking-wider">
-                                                Brak Połączenia
-                                            </span>
-                                        )}
-                                    </div>
-                                    
-                                    <p className="text-xs text-neutral-400 leading-relaxed">
-                                        Podaj link z Google Apps Script, aby pobierać i aktualizować strukturę budowy (Trafostacje, Inwertery, Stringi, Tryb) bezpośrednio z arkusza.
-                                    </p>
-
-                                    <div className="flex flex-col sm:flex-row gap-2">
-                                        <input 
-                                            type="url" 
-                                            value={sheetWebhookUrl} 
-                                            onChange={(e) => zapiszWebhookUrl(e.target.value)} 
-                                            placeholder="Wklej link Apps Script (https://script.google.com/macros/s/.../exec)" 
-                                            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono placeholder:text-neutral-700" 
-                                        />
-                                        <button 
-                                            onClick={() => pobierzZGoogleSheets(false)}
-                                            className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 rounded-xl text-xs font-black uppercase transition flex items-center justify-center gap-1.5 shrink-0"
-                                        >
-                                            <Icon name="refresh-cw" className={"h-3 w-3 text-black " + (czyTrwaSync ? "animate-spin" : "")} />
-                                            Synchronizuj
-                                        </button>
-                                    </div>
-
-                                    {/* ROZWIJALNA INSTRUKCJA I KOD GOOGLE APPS SCRIPT */}
-                                    <div className="border-t border-neutral-800/60 pt-3">
-                                        <button 
-                                            onClick={() => setInstrukcjaRozwiniecie(!instrukcjaRozwiniecie)}
-                                            className="text-xs text-neutral-400 hover:text-emerald-400 flex items-center gap-1.5 transition"
-                                        >
-                                            <Icon name="info" className="h-3.5 w-3.5" />
-                                            {instrukcjaRozwiniecie ? "Ukryj instrukcję i kod Apps Script" : "Pokaż instrukcję i kod Apps Script"}
-                                        </button>
-
-                                        {instrukcjaRozwiniecie && (
-                                            <div className="mt-3 bg-neutral-950 p-4 rounded-xl border border-neutral-850 space-y-3 animate-in slide-in-from-top-2 duration-200">
-                                                <h4 className="text-xs font-bold text-emerald-400">Instrukcja wdrożenia w 1 minutę:</h4>
-                                                <ol className="text-[11px] text-neutral-400 list-decimal pl-4 space-y-1">
-                                                    <li>Otwórz swój Arkusz Google.</li>
-                                                    <li>W menu górnym wybierz <strong>Rozszerzenia</strong> -&gt; <strong>Apps Script</strong>.</li>
-                                                    <li>Wklej poniższy kod i zapisz (kliknij dyskietkę).</li>
-                                                    <li>Kliknij niebieski przycisk <strong>Wdróż</strong> -&gt; <strong>Nowe wdrożenie</strong>.</li>
-                                                    <li>Wybierz typ: <strong>Aplikacja sieciowa</strong>. Skonfiguruj: *Wykonaj jako:* Ty, *Kto ma dostęp:* <strong>Każdy (Anyone)</strong>.</li>
-                                                    <li>Skopiuj wygenerowany adres URL i wklej go w polu u góry.</li>
-                                                </ol>
-                                                <textarea 
-                                                    readOnly 
-                                                    onClick={(e) => e.target.select()}
-                                                    className="w-full h-36 bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-[9px] text-neutral-300 font-mono focus:outline-none"
-                                                    value={`function doGet(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheets = ss.getSheets();
-  var sheetConfig = null;
-  
-  // Szukanie bezpieczne, niewrazliwe na wielkosc liter i spacje
-  for (var i = 0; i < sheets.length; i++) {
-    var name = sheets[i].getName().toLowerCase().replace(/\\s/g, "");
-    if (name === "konfiguracja") {
-      sheetConfig = sheets[i];
-      break;
+      }
     }
-  }
-  
-  if (!sheetConfig) {
-    return ContentService.createTextOutput(JSON.stringify({ error: "Brak zakladki Konfiguracja" })).setMimeType(ContentService.MimeType.TEXT);
-  }
-  
-  var trybPracy = sheetConfig.getRange("B1").getValue() || "Bębny";
-  var iloscTeamow = sheetConfig.getRange("B2").getValue() || 2;
-  var trafos = [];
-  var lastRowConfig = sheetConfig.getLastRow();
-  
-  for (var i = 5; i <= lastRowConfig; i++) {
-    var trafoId = sheetConfig.getRange(i, 1).getValue();
-    var falowniki = sheetConfig.getRange(i, 2).getValue();
-    var stringi = sheetConfig.getRange(i, 3).getValue();
-    
-    // Czyszczenie i parsowanie Trafo ID (np. "Trafo 5" -> 5)
-    var cleanId = String(trafoId).replace(/\\D/g, "");
-    if (cleanId !== "") {
-      trafos.push({
-        id: parseInt(cleanId),
-        falowniki: parseInt(falowniki) || 12,
-        stringi: parseInt(stringi) || 21
+  </script>
+  <style>
+    /* Custom scrollbars and styling enhancements for Dark Mode */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #09090b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #10b981;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .fade-in {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans antialiased min-h-screen flex flex-col selection:bg-emerald-500 selection:text-black">
+
+  <!-- TOP NAVIGATION / HEADER -->
+  <header class="sticky top-0 z-40 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 px-4 py-3 flex items-center justify-between shadow-lg">
+    <div class="flex items-center space-x-2">
+      <div class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"></div>
+      <h1 class="text-sm md:text-base font-bold tracking-wider text-emerald-400">PV CABLE TRACKER</h1>
+    </div>
+    <div class="flex items-center space-x-2">
+      <!-- Network Status Badge -->
+      <span id="network-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-zinc-500" id="network-dot"></span>
+        <span id="network-text">Offline</span>
+      </span>
+      <!-- Sync Button -->
+      <button onclick="fetchData()" id="btn-sync" class="touch-target p-2 text-zinc-400 hover:text-emerald-400 transition-colors rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700" title="Synchronizuj dane">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+      </button>
+      <!-- Settings Button -->
+      <button onclick="openSettingsModal()" class="touch-target p-2 text-zinc-400 hover:text-emerald-400 transition-colors rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700" title="Ustawienia">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- LOADING INDICATOR OVERLAY -->
+  <div id="loading-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center transition-all duration-300 hidden">
+    <div class="relative flex items-center justify-center">
+      <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-emerald-500"></div>
+      <div class="absolute h-10 w-10 rounded-full bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-ping"></div>
+    </div>
+    <p id="loading-text" class="mt-4 text-zinc-400 font-medium tracking-wide">Trwa synchronizacja danych...</p>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="flex-grow p-4 md:max-w-4xl md:mx-auto w-full flex flex-col justify-start">
+
+    <!-- ======================================================= -->
+    <!-- SCREEN 1: TEAM SELECTION (KROK 1) -->
+    <!-- ======================================================= -->
+    <section id="view-step-team" class="fade-in space-y-4">
+      <div class="text-center py-4">
+        <h2 class="text-xl font-extrabold text-zinc-100 tracking-tight">KROK 1: Wybór Zespołu</h2>
+        <p class="text-xs text-zinc-400 mt-1">Wybierz swój zespół, aby rozpocząć ewidencjonowanie pomiarów kabli</p>
+      </div>
+      
+      <div id="team-list-container" class="grid grid-cols-1 gap-3">
+        <!-- Zespoły renderowane dynamicznie -->
+      </div>
+
+      <!-- SYSTEM RAPORTÓW DZIENNYCH -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-6 shadow-xl">
+        <h3 class="text-xs font-black text-emerald-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          Dzienny Raport Zużycia Kabla
+        </h3>
+        <p class="text-[11px] text-zinc-400 mb-4">Poniższe zestawienie pokazuje sumaryczne zużycie w podziale na dni robocze dla każdego zespołu.</p>
+        <div id="daily-reports-container" class="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+          <!-- Raport dzienny generowany dynamicznie -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- SCREEN 2: INVERTER SELECTION (KROK 2) -->
+    <!-- ======================================================= -->
+    <section id="view-step-inverters" class="fade-in space-y-4 hidden">
+      <!-- Przycisk powrotu do Kroku 1 -->
+      <button onclick="goBackToStep1()" class="touch-target flex items-center space-x-1.5 text-zinc-400 hover:text-emerald-400 text-sm font-semibold transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        <span>Wróć do Zespołów</span>
+      </button>
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex justify-between items-center">
+        <div>
+          <span class="text-[10px] text-zinc-400 font-medium">Zalogowany Zespół:</span>
+          <p class="text-sm font-bold text-emerald-400" id="selected-team-display">Brak</p>
+        </div>
+        <div class="text-right">
+          <span class="text-[10px] text-zinc-400 font-medium">Suma Zespołu:</span>
+          <p class="text-sm font-bold text-zinc-200" id="team-total-display">0.00 m</p>
+        </div>
+      </div>
+
+      <!-- FILTR TRAFO -->
+      <div>
+        <span class="text-xs text-zinc-400 font-bold uppercase tracking-wider mb-2 block">Filtr Trafostacji (Zużycie)</span>
+        <div id="trafo-filter-container" class="flex flex-wrap gap-2 overflow-x-auto pb-1">
+          <!-- Przyciski filtrów renderowane dynamicznie -->
+        </div>
+      </div>
+
+      <!-- LISTA INWERTERÓW -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="text-xs text-zinc-400 font-bold uppercase tracking-wider">Wybór Falownika (WR)</span>
+          <span class="text-[11px] text-zinc-500 font-medium">Kliknij kafelek, aby przejść do pomiarów</span>
+        </div>
+        <div id="inverters-list-container" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <!-- Inwertery renderowane dynamicznie -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- SCREEN 3: MONTER INPUT FORM (KROK 3) -->
+    <!-- ======================================================= -->
+    <section id="view-step-monter-form" class="fade-in space-y-4 hidden">
+      <!-- Nawigacja wstecz i wskaźniki statusu -->
+      <div class="flex items-center justify-between">
+        <button onclick="handleBackFromForm()" class="touch-target flex items-center space-x-1.5 text-zinc-400 hover:text-emerald-400 text-sm font-semibold transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          <span>Wróć do Falowników</span>
+        </button>
+        <div class="flex items-center space-x-2">
+          <!-- Plakietka aktywnego zespołu -->
+          <span id="active-team-badge" class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold tracking-wider">
+            Brak
+          </span>
+          <!-- Plakietka aktywnego falownika -->
+          <span id="active-inverter-badge" class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold tracking-wider">
+            WR 1.1
+          </span>
+        </div>
+      </div>
+
+      <!-- Dynamiczny Współdzielony Baner Współpracy (Zastępuje sztywną blokadę) -->
+      <div id="collaboration-warning-badge" class="hidden bg-amber-950/80 border border-amber-500/30 text-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+        <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <div>
+          <h4 class="text-xs font-bold text-amber-300">FALOWNIK WSPÓŁDZIELONY (MULTIPLE TEAMS)</h4>
+          <p class="text-[11px] text-amber-200/80 mt-0.5">Wykryto pomiary wprowadzone przez inny zespół (<span id="other-teams-names" class="font-bold underline"></span>). Możesz swobodnie edytować istniejące dane, uzupełniać kolejne stringi lub dodawać nowe bębny dla swojego zespołu.</p>
+        </div>
+      </div>
+
+      <!-- FORMULARZ POMIAROWY -->
+      <div id="monter-fields-card" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+        <h3 class="text-sm font-bold text-zinc-200 mb-4 pb-2 border-b border-zinc-800 flex items-center justify-between">
+          <span>Wpisy Pomiarowe</span>
+          <span id="form-mode-title" class="text-xs text-zinc-500 uppercase tracking-wider">Tryb Bębnów</span>
+        </h3>
+
+        <!-- Dynamiczna lista wierszy pomiarów -->
+        <div id="records-list" class="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+          <!-- Generowane dynamicznie -->
+        </div>
+
+        <!-- Dodawanie bębna -->
+        <div class="mt-4 pt-4 border-t border-zinc-800 flex justify-between items-center" id="form-actions-row">
+          <button type="button" onclick="addNewRecordRow()" id="btn-add-row" class="touch-target px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 hover:text-emerald-300 border border-zinc-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Dodaj kolejny Bęben
+          </button>
+          <span class="text-[10px] text-zinc-500" id="total-rows-counter">Bębny: 1</span>
+        </div>
+      </div>
+
+      <!-- Akcje zapisu (Zawsze widoczne dla wszystkich zespołów) -->
+      <div class="pt-2">
+        <button id="btn-save-send" onclick="submitMetersToServer()" class="touch-target w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl shadow-neon-glow hover:shadow-neon-glow-lg transition-all flex items-center justify-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3"></path></svg>
+          ZAPISZ I WYŚLIJ DO CHMURY
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: OSTRZEŻENIE O BRAKU SYNCHRONIZACJI -->
+  <div id="custom-warning-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 hidden">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="flex items-center space-x-3 text-amber-400">
+        <svg class="w-8 h-8 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <h3 class="text-base font-extrabold text-zinc-100 tracking-tight">NIEWYSŁANE POMIARY!</h3>
+      </div>
+      <p class="text-xs text-zinc-300 leading-relaxed">Wykryto brak synchronizacji danych dla tego falownika z bazą Google Sheets. Opuszczenie widoku spowoduje bezpowrotną utratę wprowadzonych zmian.</p>
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <button onclick="confirmAbandonChanges()" class="touch-target px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-xl text-xs font-bold transition-all">
+          PORZUĆ ZMIANY
+        </button>
+        <button onclick="closeWarningModal()" class="touch-target px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold shadow-neon-glow transition-all">
+          ZOSTAŃ I WYŚLIJ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: POTWIERDZENIE USUNIĘCIA BĘBNA -->
+  <div id="delete-confirm-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 hidden">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="flex items-center space-x-3 text-red-400">
+        <svg class="w-8 h-8 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        <h3 class="text-base font-extrabold text-zinc-100 tracking-tight">USUŃ BĘBEN</h3>
+      </div>
+      <p class="text-xs text-zinc-300 leading-relaxed">Czy na pewno chcesz usunąć <span id="delete-drum-name" class="font-bold text-red-400">bęben</span>? Wszystkie wprowadzone dla niego pomiary zostaną wykasowane.</p>
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <button onclick="closeDeleteModal()" class="touch-target px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-xl text-xs font-bold transition-all">
+          ANULUJ
+        </button>
+        <button onclick="confirmDeleteRecordRow()" class="touch-target px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all">
+          USUŃ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: USTAWIENIA I FACTORY RESET -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 hidden">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+        <h3 class="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          Ustawienia Systemowe
+        </h3>
+        <button onclick="closeSettingsModal()" class="touch-target text-zinc-400 hover:text-zinc-100">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- App Script API URL -->
+      <div class="space-y-1">
+        <label for="input-api-url" class="text-xs font-bold text-zinc-400 block">Google Web App URL (Apps Script):</label>
+        <input type="text" id="input-api-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors">
+        <p class="text-[10px] text-zinc-500">Wklej pełny URL aplikacji sieciowej wdrożonej w edytorze skryptów Arkusza.</p>
+      </div>
+
+      <!-- Komunikat powiadomień ustawień -->
+      <div id="settings-msg" class="hidden text-[11px] p-2 rounded-lg"></div>
+
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <button onclick="saveApiUrl()" class="touch-target py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl text-xs transition-all">
+          ZAPISZ URL API
+        </button>
+        <button onclick="triggerFactoryReset()" class="touch-target py-2 bg-red-900/40 hover:bg-red-900/60 text-red-200 border border-red-500/30 rounded-xl text-xs font-bold transition-all">
+          FACTORY RESET
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STOPKA -->
+  <footer class="mt-auto py-4 border-t border-zinc-900 bg-zinc-950/80 px-4 text-center">
+    <p class="text-[10px] text-zinc-600">PV Cable Tracker SPA v2.3.0 • System Ewidencji Zużycia Okablowania Solarnego</p>
+  </footer>
+
+  <!-- CORE SYSTEM JAVASCRIPT -->
+  <script>
+    let state = {
+      apiUrl: localStorage.getItem('pv_cable_tracker_api_url') || '',
+      config: {
+        workMode: "Bębny",
+        teamsCount: 2,
+        trafos: { "Trafo 1": 12, "Trafo 2": 12 },
+        stringsCount: 12
+      },
+      meters: [], 
+      selectedTeam: "",
+      selectedTrafoFilter: "Wszystkie",
+      selectedInverter: "",
+      localEntries: [], 
+      hasUnsavedChanges: false
+    };
+
+    let pendingDeleteIndex = null;
+
+    window.onload = function() {
+      updateNetworkStatus();
+      window.addEventListener('online', updateNetworkStatus);
+      window.addEventListener('offline', updateNetworkStatus);
+
+      if (!state.apiUrl) {
+        showStatusMessage("Aby rozpocząć, wejdź w ustawienia (ikona koła zębatego) i wklej poprawny adres URL skryptu Google.", "error");
+        openSettingsModal();
+      } else {
+        fetchData();
+      }
+      renderApp();
+    };
+
+    function updateNetworkStatus() {
+      const dot = document.getElementById('network-dot');
+      const text = document.getElementById('network-text');
+      const badge = document.getElementById('network-badge');
+
+      if (navigator.onLine) {
+        dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]";
+        text.innerText = "Online";
+        badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1";
+      } else {
+        dot.className = "w-1.5 h-1.5 rounded-full bg-zinc-500";
+        text.innerText = "Offline";
+        badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 border border-zinc-700 flex items-center gap-1";
+      }
+    }
+
+    function renderApp() {
+      if (!state.selectedTeam) {
+        showView('view-step-team');
+        renderTeamSelection();
+        renderDailyReports();
+      } else if (!state.selectedInverter) {
+        showView('view-step-inverters');
+        renderInverterSelection();
+      } else {
+        showView('view-step-monter-form');
+        renderMonterForm();
+      }
+    }
+
+    function showView(viewId) {
+      const views = ['view-step-team', 'view-step-inverters', 'view-step-monter-form'];
+      views.forEach(id => {
+        const element = document.getElementById(id);
+        if (id === viewId) {
+          element.classList.remove('hidden');
+        } else {
+          element.classList.add('hidden');
+        }
       });
     }
-  }
-  
-  var sheetDC = null;
-  var sheetAC = null;
-  for (var i = 0; i < sheets.length; i++) {
-    var name = sheets[i].getName().toLowerCase().replace(/\\s/g, "");
-    if (name === "metry") {
-      sheetDC = sheets[i];
-    } else if (name === "metryac" || name === "metry_ac") {
-      sheetAC = sheets[i];
+
+    // POMOCNIK FORMATOWANIA DATY
+    function getCleanDateString(dateVal) {
+      if (!dateVal) return "Brak daty";
+      
+      let d = new Date(dateVal);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("pl-PL");
+      }
+      
+      const match = String(dateVal).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if (match) {
+        return `${match[1].padStart(2, '0')}.${match[2].padStart(2, '0')}.${match[3]}`;
+      }
+      
+      const isoMatch = String(dateVal).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (isoMatch) {
+        return `${isoMatch[3]}.${isoMatch[2]}.${isoMatch[1]}`;
+      }
+      
+      return String(dateVal).split(',')[0];
     }
-  }
-  
-  var metryDC = [];
-  if (sheetDC) {
-    var lastRowDC = sheetDC.getLastRow();
-    if (lastRowDC > 1) {
-      var valuesDC = sheetDC.getRange(2, 1, lastRowDC - 1, 11).getValues();
-      for (var j = 0; j < valuesDC.length; j++) {
-        if (valuesDC[j][0] !== "") {
-          metryDC.push({
-            ID: valuesDC[j][0],
-            Data_Wpisu: valuesDC[j][1],
-            Trafo: valuesDC[j][2],
-            Team: valuesDC[j][3],
-            WR: valuesDC[j][4],
-            Numer_Bębna_Stringu: valuesDC[j][5],
-            Zuzycie: valuesDC[j][6],
-            Zapas: valuesDC[j][7],
-            Odczyt_start: valuesDC[j][8],
-            Odczyt_Koniec: valuesDC[j][9],
-            Dlugosc_bebna: valuesDC[j][10]
-          });
+
+    // GENEROWANIE DZIENNEGO RAPORTU ZUŻYCIA
+    function renderDailyReports() {
+      const container = document.getElementById('daily-reports-container');
+      container.innerHTML = "";
+
+      const report = {};
+      state.meters.forEach(entry => {
+        const dateStr = getCleanDateString(entry.Data_Wpisu);
+        const team = entry.Team || "Brak Zespołu";
+        const zuzycie = parseFloat(entry.Zuzycie) || 0;
+
+        if (zuzycie <= 0) return;
+
+        if (!report[dateStr]) {
+          report[dateStr] = {};
+        }
+        if (!report[dateStr][team]) {
+          report[dateStr][team] = 0;
+        }
+        report[dateStr][team] += zuzycie;
+      });
+
+      const dates = Object.keys(report).sort((a, b) => {
+        const partsA = a.split('.');
+        const partsB = b.split('.');
+        if (partsA.length === 3 && partsB.length === 3) {
+          const dA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
+          const dB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
+          return dB - dA;
+        }
+        return b.localeCompare(a);
+      });
+
+      if (dates.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+            Brak wpisów pomiarowych do wyświetlenia raportu.
+          </div>
+        `;
+        return;
+      }
+
+      dates.forEach(date => {
+        const dateRow = document.createElement('div');
+        dateRow.className = "bg-zinc-950/80 border border-zinc-800/60 rounded-xl p-3 space-y-2";
+
+        let teamBreakdownHTML = "";
+        let totalDailySum = 0;
+
+        Object.entries(report[date]).forEach(([teamName, sum]) => {
+          totalDailySum += sum;
+          teamBreakdownHTML += `
+            <div class="flex justify-between items-center text-[11px] pl-2 border-l-2 border-emerald-500/40">
+              <span class="text-zinc-400 font-semibold">${teamName}</span>
+              <span class="text-emerald-400 font-bold">${sum.toFixed(2)} m</span>
+            </div>
+          `;
+        });
+
+        dateRow.innerHTML = `
+          <div class="flex justify-between items-center pb-1.5 border-b border-zinc-900">
+            <span class="text-xs font-black text-zinc-200">${date}</span>
+            <span class="text-xs font-bold text-zinc-400">Suma: <span class="text-emerald-400 font-black">${totalDailySum.toFixed(2)} m</span></span>
+          </div>
+          <div class="space-y-1.5 pt-1">
+            ${teamBreakdownHTML}
+          </div>
+        `;
+        container.appendChild(dateRow);
+      });
+    }
+
+    // KROK 1: WYBÓR ZESPOŁU
+    function renderTeamSelection() {
+      const container = document.getElementById('team-list-container');
+      container.innerHTML = "";
+
+      const teamCount = state.config.teamsCount || 2;
+      for (let i = 1; i <= teamCount; i++) {
+        const teamName = `Team ${i}`;
+        const teamTotal = calculateTeamTotal(teamName);
+
+        const card = document.createElement('button');
+        card.type = "button";
+        card.className = "touch-target w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/50 p-4 rounded-2xl flex items-center justify-between transition-all group hover:shadow-neon-glow";
+        card.onclick = () => selectTeam(teamName);
+
+        card.innerHTML = `
+          <div class="flex items-center space-x-3.5 text-left">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold group-hover:bg-emerald-500 group-hover:text-black transition-all">
+              T${i}
+            </div>
+            <div>
+              <span class="text-xs text-zinc-500 font-medium">ZESPÓŁ ROBOCZY</span>
+              <h4 class="text-base font-extrabold text-zinc-100">${teamName}</h4>
+            </div>
+          </div>
+          <div class="text-right flex items-center space-x-2">
+            <div>
+              <span class="text-[10px] text-zinc-500 uppercase font-medium">Zużycie</span>
+              <p class="text-xs font-bold text-zinc-300">${teamTotal.toFixed(2)} m</p>
+            </div>
+            <svg class="w-5 h-5 text-zinc-600 group-hover:text-emerald-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          </div>
+        `;
+        container.appendChild(card);
+      }
+    }
+
+    function selectTeam(teamName) {
+      state.selectedTeam = teamName;
+      renderApp();
+    }
+
+    // KROK 2: WYBÓR FALOWNIKA
+    function renderInverterSelection() {
+      document.getElementById('selected-team-display').innerText = state.selectedTeam;
+      document.getElementById('team-total-display').innerText = `${calculateTeamTotal(state.selectedTeam).toFixed(2)} m`;
+
+      const filterContainer = document.getElementById('trafo-filter-container');
+      filterContainer.innerHTML = "";
+
+      const btnAll = document.createElement('button');
+      btnAll.className = `px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${state.selectedTrafoFilter === 'Wszystkie' ? 'bg-emerald-500 text-black border-emerald-500 shadow-neon-glow' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'}`;
+      btnAll.innerText = `Wszystkie (${calculateGrandTotal().toFixed(2)} m)`;
+      btnAll.onclick = () => filterTrafos('Wszystkie');
+      filterContainer.appendChild(btnAll);
+
+      Object.keys(state.config.trafos).forEach(trafoName => {
+        const trafoSum = calculateTrafoTotal(trafoName);
+        const btn = document.createElement('button');
+        btn.className = `px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${state.selectedTrafoFilter === trafoName ? 'bg-emerald-500 text-black border-emerald-500 shadow-neon-glow' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'}`;
+        btn.innerText = `${trafoName} (${trafoSum.toFixed(2)} m)`;
+        btn.onclick = () => filterTrafos(trafoName);
+        filterContainer.appendChild(btn);
+      });
+
+      const invertersContainer = document.getElementById('inverters-list-container');
+      invertersContainer.innerHTML = "";
+
+      Object.entries(state.config.trafos).forEach(([trafoName, wrCount]) => {
+        if (state.selectedTrafoFilter !== 'Wszystkie' && state.selectedTrafoFilter !== trafoName) return;
+
+        const trafoNum = trafoName.replace(/[^0-9]/g, "") || "1";
+
+        for (let j = 1; j <= wrCount; j++) {
+          const inverterName = `WR ${trafoNum}.${j}`;
+          const inverterTotal = calculateInverterTotal(inverterName);
+          const hasData = inverterTotal > 0;
+          
+          const firstTeam = getInverterTeamOwner(inverterName);
+
+          const button = document.createElement('button');
+          button.className = `touch-target p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all group ${hasData ? 'bg-zinc-900 border-emerald-500/30 hover:border-emerald-500/70 shadow-neon-glow' : 'bg-zinc-900/45 border-zinc-800/80 hover:border-zinc-800'}`;
+          button.onclick = () => selectInverter(inverterName, trafoName);
+
+          button.innerHTML = `
+            <div class="flex items-center justify-between w-full">
+              <span class="text-xs font-black text-zinc-100 tracking-wide group-hover:text-emerald-400 transition-colors">${inverterName}</span>
+              ${hasData ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]"></span>` : ''}
+            </div>
+            <div class="mt-4">
+              <span class="text-[9px] text-zinc-500 uppercase font-semibold block tracking-wider">Zużycie kabla</span>
+              <span class="text-sm font-extrabold ${hasData ? 'text-emerald-400' : 'text-zinc-400'}">${inverterTotal.toFixed(2)} m</span>
+              ${firstTeam ? `<span class="text-[8px] block text-zinc-500 font-bold tracking-tight mt-1 truncate">Zapis: ${firstTeam}</span>` : ''}
+            </div>
+          `;
+          invertersContainer.appendChild(button);
+        }
+      });
+    }
+
+    function filterTrafos(filter) {
+      state.selectedTrafoFilter = filter;
+      renderInverterSelection();
+    }
+
+    function selectInverter(inverterName, trafoName) {
+      state.selectedInverter = inverterName;
+      state.activeTrafo = trafoName;
+
+      const existing = state.meters.filter(m => m.Falownik_WR === inverterName);
+      state.localEntries = [];
+
+      if (state.config.workMode === "Bębny") {
+        if (existing.length > 0) {
+          state.localEntries = existing.map(e => ({
+            ID: e.ID,
+            Data_Wpisu: e.Data_Wpisu,
+            Team: e.Team,
+            Trafostacja: e.Trafostacja,
+            Falownik_WR: e.Falownik_WR,
+            Numer_Bębna_Stringu: e.Numer_Bębna_Stringu,
+            Dlugosc_Bebna: parseFloat(e.Dlugosc_Bebna) || 0,
+            Odczyt_Start: parseFloat(e.Odczyt_Start) || 0,
+            Odczyt_Koniec: parseFloat(e.Odczyt_Koniec) || 0,
+            Zuzycie: parseFloat(e.Zuzycie) || 0,
+            Zapas: parseFloat(e.Zapas) || 0
+          }));
+        } else {
+          state.localEntries.push(createEmptyRecord("Bęben #1", 500));
+        }
+      } else {
+        // TRYB STRINGÓW - Zawsze generuj pełną pulę stringów z konfiguracji
+        const strCount = state.config.stringsCount || 12;
+        for (let s = 1; s <= strCount; s++) {
+          const label = `String #${s}`;
+          const found = existing.find(e => e.Numer_Bębna_Stringu === label);
+          
+          if (found) {
+            // Istniejący zapis w bazie danych (ładujemy go)
+            state.localEntries.push({
+              ID: found.ID,
+              Data_Wpisu: found.Data_Wpisu,
+              Team: found.Team,
+              Trafostacja: found.Trafostacja,
+              Falownik_WR: found.Falownik_WR,
+              Numer_Bębna_Stringu: found.Numer_Bębna_Stringu,
+              Dlugosc_Bebna: parseFloat(found.Dlugosc_Bebna) || 0,
+              Odczyt_Start: parseFloat(found.Odczyt_Start) || 0,
+              Odczyt_Koniec: parseFloat(found.Odczyt_Koniec) || 0,
+              Zuzycie: parseFloat(found.Zuzycie) || 0,
+              Zapas: parseFloat(found.Zapas) || 0
+            });
+          } else {
+            // Brak zapisu - pusta karta gotowa do edycji
+            state.localEntries.push({
+              ID: generateUUID(),
+              Data_Wpisu: new Date().toISOString(),
+              Team: "", // Pusty team, zostanie nadany dopiero przy edycji
+              Trafostacja: state.activeTrafo.replace("Trafo ", ""),
+              Falownik_WR: state.selectedInverter,
+              Numer_Bębna_Stringu: label,
+              Dlugosc_Bebna: 0,
+              Odczyt_Start: 0,
+              Odczyt_Koniec: 0,
+              Zuzycie: 0,
+              Zapas: 0
+            });
+          }
+        }
+      }
+
+      state.hasUnsavedChanges = false;
+      renderApp();
+    }
+
+    function createEmptyRecord(label, defaultLength) {
+      return {
+        ID: generateUUID(),
+        Data_Wpisu: new Date().toISOString(),
+        Team: state.selectedTeam,
+        Trafostacja: state.activeTrafo.replace("Trafo ", ""),
+        Falownik_WR: state.selectedInverter,
+        Numer_Bębna_Stringu: label,
+        Dlugosc_Bebna: defaultLength,
+        Odczyt_Start: 0,
+        Odczyt_Koniec: 0,
+        Zuzycie: 0,
+        Zapas: 0
+      };
+    }
+
+    // KROK 3: WIDOK MONTERA I FORMULARZ
+    function renderMonterForm() {
+      document.getElementById('active-inverter-badge').innerText = state.selectedInverter;
+      
+      const activeTeamBadge = document.getElementById('active-team-badge');
+      if (activeTeamBadge) {
+        activeTeamBadge.innerText = state.selectedTeam;
+      }
+
+      // Sprawdzenie innych zespołów, które mają wprowadzone zużycie
+      const otherTeams = [...new Set(state.localEntries
+        .filter(entry => entry.Team && entry.Team !== state.selectedTeam && entry.Zuzycie > 0)
+        .map(entry => entry.Team)
+      )];
+
+      const collaborationWarning = document.getElementById('collaboration-warning-badge');
+      const otherTeamsNames = document.getElementById('other-teams-names');
+
+      if (otherTeams.length > 0) {
+        collaborationWarning.classList.remove('hidden');
+        otherTeamsNames.innerText = otherTeams.join(", ");
+      } else {
+        collaborationWarning.classList.add('hidden');
+      }
+
+      const recordsContainer = document.getElementById('records-list');
+      recordsContainer.innerHTML = "";
+
+      const btnAddRow = document.getElementById('btn-add-row');
+      const modeTitle = document.getElementById('form-mode-title');
+      const rowsCounter = document.getElementById('total-rows-counter');
+
+      if (state.config.workMode === "Bębny") {
+        modeTitle.innerText = "Tryb Bębnów";
+        rowsCounter.innerText = `Bębnów: ${state.localEntries.length}`;
+        if (btnAddRow) btnAddRow.style.display = "flex";
+      } else {
+        modeTitle.innerText = "Tryb Stringów";
+        rowsCounter.innerText = `Stringów: ${state.localEntries.length}`;
+        if (btnAddRow) btnAddRow.style.display = "none";
+      }
+
+      state.localEntries.forEach((entry, index) => {
+        const itemRow = document.createElement('div');
+        itemRow.id = `record-row-${index}`;
+        
+        const hasConsumption = entry.Zuzycie > 0;
+        const isMyTeam = (!entry.Team || entry.Team === state.selectedTeam);
+
+        let borderClass = "";
+        let headerHTML = "";
+
+        if (!hasConsumption) {
+          borderClass = "border-zinc-800/80 bg-zinc-950/40 hover:border-zinc-700";
+          headerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs text-zinc-300 uppercase">${entry.Numer_Bębna_Stringu}</span>
+            </div>
+          `;
+        } else if (isMyTeam) {
+          borderClass = "border-emerald-500/30 bg-zinc-950 hover:border-emerald-500/50";
+          headerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">${entry.Numer_Bębna_Stringu}</span>
+              <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[9px] font-bold">Mój zespół</span>
+            </div>
+          `;
+        } else {
+          borderClass = "border-amber-500/40 bg-amber-950/10 hover:border-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.1)]";
+          headerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-extrabold text-xs text-amber-400 tracking-wider uppercase">${entry.Numer_Bębna_Stringu}</span>
+              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold">Zapis: ${entry.Team}</span>
+            </div>
+          `;
+        }
+
+        itemRow.className = `p-3.5 border rounded-xl space-y-3 relative transition-all ${borderClass}`;
+
+        // Zmiana: wywołanie askRemoveRecordRow(index) zamiast bezpośredniego usuwania
+        const deleteButtonHTML = (state.config.workMode === "Bębny" && state.localEntries.length > 1) 
+          ? `<button type="button" onclick="askRemoveRecordRow(${index})" class="touch-target text-zinc-500 hover:text-red-400 transition-colors">
+               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+             </button>`
+          : ``;
+
+        if (state.config.workMode === "Bębny") {
+          itemRow.innerHTML = `
+            <div class="flex justify-between items-center pb-2 border-b border-zinc-900" id="record-header-${index}">
+              ${headerHTML}
+            </div>
+            <div class="absolute right-3.5 top-3">
+              ${deleteButtonHTML}
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="text-[9px] text-zinc-500 font-bold block uppercase mb-1">Dł. całkowita (M)</label>
+                <input type="number" step="any" value="${entry.Dlugosc_Bebna}" oninput="updateRecordField(${index}, 'Dlugosc_Bebna', this.value)" onfocus="this.select()" class="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg p-2 text-xs font-bold text-zinc-200 focus:outline-none">
+              </div>
+              <div>
+                <label class="text-[9px] text-zinc-500 font-bold block uppercase mb-1">Start (M)</label>
+                <input type="number" step="any" value="${entry.Odczyt_Start}" oninput="updateRecordField(${index}, 'Odczyt_Start', this.value)" onfocus="this.select()" class="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg p-2 text-xs font-bold text-zinc-200 focus:outline-none">
+              </div>
+              <div>
+                <label class="text-[9px] text-zinc-500 font-bold block uppercase mb-1">Koniec (M)</label>
+                <input type="number" step="any" value="${entry.Odczyt_Koniec}" oninput="updateRecordField(${index}, 'Odczyt_Koniec', this.value)" onfocus="this.select()" class="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg p-2 text-xs font-bold text-zinc-200 focus:outline-none">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-900/60 text-xs font-medium">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[9px] text-zinc-500 uppercase">Zużycie:</span>
+                <span id="zuzycie-label-${index}" class="font-extrabold text-emerald-400 text-xs">${entry.Zuzycie.toFixed(2)} m</span>
+              </div>
+              <div class="flex items-center gap-1.5 justify-end">
+                <span class="text-[9px] text-zinc-500 uppercase">Zapas:</span>
+                <span id="zapas-label-${index}" class="font-extrabold text-indigo-400 text-xs">${entry.Zapas.toFixed(2)} m</span>
+              </div>
+            </div>
+          `;
+        } else {
+          // Tryb Stringi
+          itemRow.innerHTML = `
+            <div class="flex items-center justify-between pb-1 border-b border-zinc-900/60 mb-2" id="record-header-${index}">
+              ${headerHTML}
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[8px] text-zinc-500 font-bold block uppercase mb-1">Start (M)</label>
+                <input type="number" step="any" value="${entry.Odczyt_Start}" oninput="updateRecordField(${index}, 'Odczyt_Start', this.value)" onfocus="this.select()" class="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg p-2 text-xs font-bold text-zinc-200 focus:outline-none">
+              </div>
+              <div>
+                <label class="text-[8px] text-zinc-500 font-bold block uppercase mb-1">Koniec (M)</label>
+                <input type="number" step="any" value="${entry.Odczyt_Koniec}" oninput="updateRecordField(${index}, 'Odczyt_Koniec', this.value)" onfocus="this.select()" class="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg p-2 text-xs font-bold text-zinc-200 focus:outline-none">
+              </div>
+            </div>
+            <div class="pt-1.5 border-t border-zinc-900/40 text-right">
+              <span class="text-[10px] text-zinc-500">Zużycie stringu:</span>
+              <span id="zuzycie-label-${index}" class="text-xs font-black text-emerald-400 ml-1">${entry.Zuzycie.toFixed(2)} m</span>
+            </div>
+          `;
+        }
+
+        recordsContainer.appendChild(itemRow);
+      });
+    }
+
+    // Dynamiczne przeliczanie wartości w czasie rzeczywistym bezpośrednio w DOM
+    function updateRecordField(index, fieldName, value) {
+      const record = state.localEntries[index];
+      
+      if (fieldName === 'Numer_Bębna_Stringu') {
+        record[fieldName] = value;
+      } else {
+        record[fieldName] = parseFloat(value) || 0;
+      }
+
+      record.Zuzycie = Math.abs(record.Odczyt_Start - record.Odczyt_Koniec);
+
+      // Jeżeli monter wpisuje nową wartość, automatycznie przypisz do jego zespołu
+      if (fieldName === 'Odczyt_Start' || fieldName === 'Odczyt_Koniec' || fieldName === 'Dlugosc_Bebna') {
+        record.Team = state.selectedTeam;
+      }
+
+      if (state.config.workMode === "Bębny") {
+        if (record.Dlugosc_Bebna === 0) {
+          record.Zapas = 0; 
+        } else {
+          record.Zapas = record.Dlugosc_Bebna - record.Zuzycie;
+        }
+      } else {
+        record.Dlugosc_Bebna = 0;
+        record.Zapas = 0;
+      }
+
+      state.hasUnsavedChanges = true;
+
+      // Natychmiastowe uaktualnienie całkowitej sumy w locie (jeżeli element istnieje)
+      const liveSum = calculateInverterLiveTotal();
+      const liveTotalEl = document.getElementById('inverter-live-total');
+      if (liveTotalEl) {
+        liveTotalEl.innerText = `${liveSum.toFixed(2)} m`;
+      }
+
+      // Aktualizacja wartości zużycia i zapasu bez utraty zaznaczenia
+      const zuzycieLabel = document.getElementById(`zuzycie-label-${index}`);
+      if (zuzycieLabel) {
+        zuzycieLabel.innerText = `${record.Zuzycie.toFixed(2)} m`;
+      }
+
+      const zapasLabel = document.getElementById(`zapas-label-${index}`);
+      if (zapasLabel) {
+        zapasLabel.innerText = `${record.Zapas.toFixed(2)} m`;
+      }
+
+      // Dynamiczna zmiana klas CSS w locie na podstawie nowo wprowadzonego zużycia
+      const rowElement = document.getElementById(`record-row-${index}`);
+      const headerElement = document.getElementById(`record-header-${index}`);
+      if (rowElement && headerElement) {
+        const hasConsumption = record.Zuzycie > 0;
+        const isMyTeam = (!record.Team || record.Team === state.selectedTeam);
+
+        if (!hasConsumption) {
+          rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-zinc-800/80 bg-zinc-950/40 hover:border-zinc-700";
+          headerElement.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs text-zinc-300 uppercase">${record.Numer_Bębna_Stringu}</span>
+            </div>
+          `;
+        } else if (isMyTeam) {
+          rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-emerald-500/30 bg-zinc-950 hover:border-emerald-500/50";
+          headerElement.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">${record.Numer_Bębna_Stringu}</span>
+              <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[9px] font-bold">Mój zespół</span>
+            </div>
+          `;
+        } else {
+          rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-amber-500/40 bg-amber-950/10 hover:border-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.1)]";
+          headerElement.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-extrabold text-xs text-amber-400 tracking-wider uppercase">${record.Numer_Bębna_Stringu}</span>
+              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold">Zapis: ${record.Team}</span>
+            </div>
+          `;
         }
       }
     }
-  }
-  
-  var metryAC = [];
-  if (sheetAC) {
-    var lastRowAC = sheetAC.getLastRow();
-    if (lastRowAC > 1) {
-      var valuesAC = sheetAC.getRange(2, 1, lastRowAC - 1, 9).getValues();
-      for (var k = 0; k < valuesAC.length; k++) {
-        if (valuesAC[k][0] !== "") {
-          metryAC.push({
-            ID: valuesAC[k][0],
-            Data_Wpisu: valuesAC[k][1],
-            Trafo: valuesAC[k][2],
-            Team: valuesAC[k][3],
-            WR: valuesAC[k][4],
-            Zuzycie: valuesAC[k][5],
-            Odczyt_start: valuesAC[k][6],
-            Odczyt_Koniec: valuesAC[k][7],
-            Numer_Elementu: valuesAC[k][8] || "Kabel AC"
-          });
-        }
+
+    function addNewRecordRow() {
+      const nextNum = state.localEntries.length + 1;
+      state.localEntries.push(createEmptyRecord(`Bęben #${nextNum}`, 500));
+      state.hasUnsavedChanges = true;
+      renderMonterForm();
+    }
+
+    // Wyświetlenie modalu potwierdzenia przed realnym usunięciem wiersza
+    function askRemoveRecordRow(index) {
+      pendingDeleteIndex = index;
+      const entry = state.localEntries[index];
+      const nameSpan = document.getElementById('delete-drum-name');
+      if (nameSpan) {
+        nameSpan.innerText = entry.Numer_Bębna_Stringu || `Bęben #${index + 1}`;
+      }
+      document.getElementById('delete-confirm-modal').classList.remove('hidden');
+    }
+
+    // Potwierdzenie usunięcia z modalu
+    function confirmDeleteRecordRow() {
+      if (pendingDeleteIndex !== null) {
+        removeRecordRow(pendingDeleteIndex);
+        pendingDeleteIndex = null;
+      }
+      closeDeleteModal();
+    }
+
+    // Zamknięcie modalu potwierdzenia usunięcia
+    function closeDeleteModal() {
+      document.getElementById('delete-confirm-modal').classList.add('hidden');
+    }
+
+    function removeRecordRow(index) {
+      if (state.localEntries.length <= 1) return;
+
+      state.localEntries.splice(index, 1);
+      state.hasUnsavedChanges = true;
+      renderMonterForm();
+    }
+
+    // POWRÓT DO KROKU 1
+    function goBackToStep1() {
+      state.selectedTeam = "";
+      state.selectedInverter = "";
+      renderApp();
+    }
+
+    function handleBackFromForm() {
+      if (state.hasUnsavedChanges) {
+        openWarningModal();
+      } else {
+        state.selectedInverter = "";
+        renderApp();
       }
     }
-  }
-  
-  var response = {
-    konfiguracja: { trybPracy: trybPracy, iloscTeamow: parseInt(iloscTeamow), trafos: trafos },
-    metryDC: metryDC,
-    metryAC: metryAC
-  };
-  
-  // WYSYLKA JAKO TEXT - ZAPOBIEGA BLEDOM CORS PRZEKIEROWAN
-  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.TEXT);
-}
 
-function doPost(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var postData = JSON.parse(e.postData.contents);
-  var sheets = ss.getSheets();
-  
-  var sheetConfig = null;
-  var sheetDC = null;
-  var sheetAC = null;
-  
-  for (var i = 0; i < sheets.length; i++) {
-    var name = sheets[i].getName().toLowerCase().replace(/\\s/g, "");
-    if (name === "konfiguracja") {
-      sheetConfig = sheets[i];
-    } else if (name === "metry") {
-      sheetDC = sheets[i];
-    } else if (name === "metryac" || name === "metry_ac") {
-      sheetAC = sheets[i];
+    // AGREGACJE MATEMATYCZNE
+    function calculateGrandTotal() {
+      return state.meters.reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
-  }
-  
-  if (postData.action === 'clear_database') {
-    if (sheetConfig) {
-      sheetConfig.getRange("B1").setValue("Bębny");
-      sheetConfig.getRange("B2").setValue(2);
-      sheetConfig.getRange("A5:C100").clearContent();
-      sheetConfig.getRange("A5").setValue(1); sheetConfig.getRange("B5").setValue(12); sheetConfig.getRange("C5").setValue(21);
-      sheetConfig.getRange("A6").setValue(2); sheetConfig.getRange("B6").setValue(12); sheetConfig.getRange("C6").setValue(21);
-      sheetConfig.getRange("A7").setValue(3); sheetConfig.getRange("B7").setValue(12); sheetConfig.getRange("C7").setValue(21);
-      sheetConfig.getRange("A8").setValue(4); sheetConfig.getRange("B8").setValue(14); sheetConfig.getRange("C8").setValue(21);
+
+    function calculateTeamTotal(teamName) {
+      return state.meters
+        .filter(entry => entry.Team === teamName)
+        .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
-    if (sheetDC && sheetDC.getLastRow() > 1) {
-      sheetDC.getRange(2, 1, sheetDC.getLastRow() - 1, sheetDC.getLastColumn()).clearContent();
+
+    function calculateTrafoTotal(trafoName) {
+      const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "");
+      return state.meters
+        .filter(entry => {
+          const entryTrafo = String(entry.Trafostacja).replace(/[^0-9]/g, "");
+          return entryTrafo === cleanTrafoNum;
+        })
+        .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
-    if (sheetAC && sheetAC.getLastRow() > 1) {
-      sheetAC.getRange(2, 1, sheetAC.getLastRow() - 1, sheetAC.getLastColumn()).clearContent();
+
+    function calculateInverterTotal(inverterName) {
+      return state.meters
+        .filter(entry => entry.Falownik_WR === inverterName)
+        .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
-    return ContentService.createTextOutput("Wyczyszczono").setMimeType(ContentService.MimeType.TEXT);
-  }
-  
-  // Zapis danych DC (Metry) - CZYSZCZENIE TYLKO ELEMENTOW (BEZ KOLUMN I FORMATOW)
-  if (!sheetDC) {
-    sheetDC = ss.insertSheet("Metry");
-    sheetDC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Numer_Bębna_Stringu", "Zuzycie", "Zapas", "Odczyt_start", "Odczyt_Koniec", "Dlugosc_bebna"]);
-  } else if (sheetDC.getLastRow() > 1) {
-    sheetDC.getRange(2, 1, sheetDC.getLastRow() - 1, sheetDC.getLastColumn()).clearContent();
-  }
-  
-  if (postData.metryDC && postData.metryDC.length > 0) {
-    postData.metryDC.forEach(function(row) {
-      sheetDC.appendRow([row.ID, row.Data_Wpisu, row.Trafo, row.Team, row.WR, row.Numer_Bębna_Stringu, row.Zuzycie, row.Zapas, row.Odczyt_start, row.Odczyt_Koniec, row.Dlugosc_bebna]);
-    });
-  }
-  
-  // Zapis danych AC (Metry AC) - BEZ FORMATU I NAGLOWKOW
-  if (!sheetAC) {
-    sheetAC = ss.insertSheet("Metry AC");
-    sheetAC.appendRow(["ID", "Data_Wpisu", "Trafo", "Team", "WR", "Zuzycie", "Odczyt_start", "Odczyt_Koniec", "Numer_Elementu"]);
-  } else if (sheetAC.getLastRow() > 1) {
-    sheetAC.getRange(2, 1, sheetAC.getLastRow() - 1, sheetAC.getLastColumn()).clearContent();
-  }
-  
-  if (postData.metryAC && postData.metryAC.length > 0) {
-    postData.metryAC.forEach(function(row) {
-      sheetAC.appendRow([row.ID, row.Data_Wpisu, row.Trafo, row.Team, row.WR, row.Zuzycie, row.Odczyt_start, row.Odczyt_Koniec, row.Numer_Elementu || "Kabel AC"]);
-    });
-  }
-  
-  return ContentService.createTextOutput("Zapisano pomyślnie").setMimeType(ContentService.MimeType.TEXT);
-}`}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
 
-                                <div className="text-center space-y-2 py-4">
-                                    <h2 className="text-2xl font-black text-white tracking-tight">KROK 1: WYBÓR ZESPOŁU</h2>
-                                    <p className="text-sm text-neutral-400 max-w-md mx-auto">Wybierz swój zespół roboczy, aby rozpocząć ewidencjonowanie pomiarów kabli.</p>
-                                </div>
+    function calculateInverterLiveTotal() {
+      return state.localEntries.reduce((acc, entry) => acc + (entry.Zuzycie || 0), 0);
+    }
 
-                                <div className="grid gap-3">
-                                    {Array.from({ length: konfig.iloscTeamow }).map((_, i) => {
-                                        const nazwaTeamu = 'Team ' + (i + 1);
-                                        const sumaDC = obliczSumeTeam(nazwaTeamu, 'DC');
-                                        const sumaAC = obliczSumeTeam(nazwaTeamu, 'AC');
+    function getInverterTeamOwner(inverterName) {
+      // Pobieraj tylko te ekipy, które mają realne zużycie kabla > 0
+      const records = state.meters.filter(m => m.Falownik_WR === inverterName && (parseFloat(m.Zuzycie) || 0) > 0);
+      if (records.length > 0) {
+        const teams = [...new Set(records.map(r => r.Team))];
+        return teams.join(", ");
+      }
+      return null;
+    }
 
-                                        return (
-                                            <button key={nazwaTeamu} onClick={() => { setWybranyTeam(nazwaTeamu); pokazPowiadomienie('Zalogowano jako ' + nazwaTeamu, 'success'); }} className="group w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between text-left transition-all">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="h-12 w-12 bg-neutral-950 rounded-xl flex items-center justify-center text-emerald-400 font-black text-lg group-hover:bg-emerald-500 group-hover:text-black transition-colors">T{i + 1}</div>
-                                                    <div>
-                                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Zespół Roboczy</span>
-                                                        <h3 className="font-extrabold text-lg text-white leading-tight group-hover:text-emerald-400 transition-colors">{nazwaTeamu}</h3>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Suma dzisiaj</div>
-                                                    <div className="text-sm font-black text-emerald-400">{(sumaDC + sumaAC).toFixed(2)} m</div>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+    // KOMUNIKACJA Z BACKENDEM GOOGLE APPS SCRIPT
+    function showLoading(show, message = "Trwa synchronizacja danych...") {
+      const overlay = document.getElementById('loading-overlay');
+      const text = document.getElementById('loading-text');
+      if (show) {
+        text.innerText = message;
+        overlay.classList.remove('hidden');
+      } else {
+        overlay.classList.add('hidden');
+      }
+    }
 
-                                {/* RAPORT DZIENNY */}
-                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
-                                    <div className="flex items-center gap-2 text-emerald-400">
-                                        <Icon name="calendar" className="h-5 w-5 text-emerald-400" />
-                                        <h3 className="font-black text-sm tracking-widest uppercase">Dzienny Raport Zużycia Kabla</h3>
-                                    </div>
-                                    <p className="text-xs text-neutral-400">Podsumowanie i podział wykonanej pracy dla każdego z zespołów na dzień dzisiejszy.</p>
+    function fetchData() {
+      if (!state.apiUrl) return;
 
-                                    <div className="bg-neutral-950 border border-neutral-900 rounded-2xl p-4 space-y-3">
-                                        <div className="flex justify-between items-center pb-2 border-b border-neutral-900">
-                                            <span className="text-xs font-bold text-neutral-300">Dzisiejsza data ({new Date().toLocaleDateString('pl-PL')})</span>
-                                            <span className="text-xs font-extrabold text-emerald-400">Suma: {(obliczSumeCalkowita('DC') + obliczSumeCalkowita('AC')).toFixed(2)} m</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {Array.from({ length: konfig.iloscTeamow }).map((_, i) => {
-                                                const nazwaTeamu = 'Team ' + (i + 1);
-                                                const sumaDC = obliczSumeTeam(nazwaTeamu, 'DC');
-                                                const sumaAC = obliczSumeTeam(nazwaTeamu, 'AC');
-                                                const procent = (obliczSumeCalkowita('DC') + obliczSumeCalkowita('AC')) > 0 
-                                                    ? ((sumaDC + sumaAC) / (obliczSumeCalkowita('DC') + obliczSumeCalkowita('AC'))) * 100 
-                                                    : 0;
+      showLoading(true, "Pobieranie konfiguracji z chmury...");
 
-                                                return (
-                                                    <div key={nazwaTeamu} className="space-y-1.5">
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="text-neutral-400 font-medium flex items-center gap-1.5">
-                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                                                                {nazwaTeamu}
-                                                            </span>
-                                                            <span className="font-bold text-neutral-200">{(sumaDC + sumaAC).toFixed(2)} m</span>
-                                                        </div>
-                                                        <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: procent + '%' }}></div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
+      fetch(state.apiUrl)
+        .then(response => {
+          if (!response.ok) throw new Error("Problem z siecią");
+          return response.json();
+        })
+        .then(data => {
+          if (data.status === "success") {
+            state.config = data.config;
+            state.meters = data.meters || [];
+            updateNetworkStatus();
+            renderApp();
+          } else {
+            showStatusMessage("Błąd pobierania danych: " + data.message, "error");
+          }
+        })
+        .catch(error => {
+          console.error("Błąd API:", error);
+          showStatusMessage("Pracujesz offline. Dane pobrane z pamięci lokalnej.", "error");
+        })
+        .finally(() => {
+          showLoading(false);
+        });
+    }
 
-                                    <button 
-                                        onClick={() => setCzyCzyszczenieBazy(true)}
-                                        className="w-full text-center text-[10px] text-red-500 hover:text-red-400 hover:underline pt-2 tracking-wider uppercase font-extrabold transition"
-                                    >
-                                        Przywróć ustawienia fabryczne i wyczyść arkusz
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+    function submitMetersToServer() {
+      if (!state.apiUrl) {
+        openSettingsModal();
+        return;
+      }
 
-                        {/* WIDOK 2: WIDOK GŁÓWNY TEAMU */}
-                        {wybranyTeam && !wybranyFalownik && (
-                            <div className="space-y-6">
-                                <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-                                    <button onClick={() => setWybranyTeam(null)} className="flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-white transition">
-                                        <Icon name="arrow-left" className="h-4 w-4" /> Wróć do Zespołów / Konfiguracji URL
-                                    </button>
-                                    <div className="text-xs bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-full text-neutral-400 flex items-center gap-2">
-                                        Zalogowany: <span className="text-emerald-400 font-extrabold">{wybranyTeam}</span>
-                                        <span className="h-1 w-1 bg-neutral-700 rounded-full" />
-                                        Suma zespołu ({aktywnaZakladka.toUpperCase()}): <span className="text-white font-extrabold">{obliczSumeTeam(wybranyTeam, aktywnaZakladka === 'dc' ? 'DC' : 'AC').toFixed(2)} m</span>
-                                    </div>
-                                </div>
+      showLoading(true, "Zapisywanie pomiarów...");
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
-                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">SUMA WSZYSTKICH TRAFO ({aktywnaZakladka.toUpperCase()})</span>
-                                        <div className="text-2xl font-black text-emerald-400 tracking-tight mt-1">
-                                            {obliczSumeCalkowita(aktywnaZakladka === 'dc' ? 'DC' : 'AC').toFixed(2)} m
-                                        </div>
-                                    </div>
-                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between">
-                                        <div>
-                                            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">TRYB PRACY (DC)</span>
-                                            <div className="text-sm font-extrabold text-white flex items-center gap-1.5 mt-1">
-                                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                {aktywnaZakladka === 'dc' ? 'DC: ' + konfig.trybPracy : 'AC Obwody'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+      const payloadDate = new Date().toLocaleString("pl-PL");
+      
+      // FILTRACJA: Przesyłamy tylko te rekordy, które mają Zużycie > 0
+      const activeEntries = state.localEntries.filter(e => (parseFloat(e.Zuzycie) || 0) > 0);
 
-                                {/* FILTRY TRAFOSTACJI */}
-                                <div className="space-y-2">
-                                    <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">WYBÓR TRAFOSTACJI (ZUŻYCIE {aktywnaZakladka.toUpperCase()})</span>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {konfig.trafos.map(t => {
-                                            const sumaT = obliczSumeTrafo(t.id, aktywnaZakladka === 'dc' ? 'DC' : 'AC');
-                                            return (
-                                                <button key={t.id} onClick={() => setWybraneTrafo(t.id)} className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${wybraneTrafo === t.id ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/10' : 'bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400'}`}>
-                                                    Trafo {t.id} ({sumaT.toFixed(2)} m)
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+      const mappedPayload = activeEntries.map(e => ({
+        ...e,
+        Team: e.Team || state.selectedTeam,
+        Data_Wpisu: payloadDate
+      }));
 
-                                {/* LISTA FALOWNIKÓW */}
-                                <div className="space-y-3">
-                                    <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">WYBÓR FALOWNIKA (WR) DLA TRAFO {wybraneTrafo}</span>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {Array.from({ length: (konfig.trafos.find(function(t) { return t.id === wybraneTrafo; }) || {}).falowniki || 12 }).map((_, idx) => {
-                                            const wrIndex = idx + 1;
-                                            const wrKod = 'WR ' + wybraneTrafo + '.' + wrIndex;
-                                            const sumaFalownika = obliczSumeFalownika(wrKod, aktywnaZakladka === 'dc' ? 'DC' : 'AC');
-                                            const autorzy = pobierzAutorowWR(wrKod, aktywnaZakladka === 'dc' ? 'DC' : 'AC');
-                                            
-                                            const mamWpis = autorzy.includes(wybranyTeam);
-                                            const ktosInnyWpisal = autorzy.some(function(a) { return a !== wybranyTeam; });
+      const body = {
+        action: "saveMeters",
+        selectedInverter: state.selectedInverter,
+        data: mappedPayload
+      };
 
-                                            let stylKafli = "border-neutral-800 bg-neutral-900/40 hover:bg-neutral-900";
-                                            if (mamWpis && ktosInnyWpisal) {
-                                                stylKafli = "border-amber-500/50 bg-amber-950/10 hover:bg-amber-950/20";
-                                            } else if (mamWpis) {
-                                                stylKafli = "border-emerald-500/40 bg-emerald-950/5 hover:bg-emerald-950/10";
-                                            } else if (ktosInnyWpisal) {
-                                                stylKafli = "border-amber-600/30 bg-amber-950/5 hover:bg-amber-950/10";
-                                            }
+      fetch(state.apiUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      .then(() => {
+        state.hasUnsavedChanges = false;
+        // Aktualizacja lokalnego cache'u: usuwamy stare wpisy z tego falownika i dodajemy nowe
+        state.meters = state.meters.filter(m => m.Falownik_WR !== state.selectedInverter);
+        state.meters = state.meters.concat(mappedPayload);
 
-                                            return (
-                                                <button key={wrKod} onClick={() => setWybranyFalownik(wrKod)} className={`group border rounded-2xl p-4 text-left transition-all relative overflow-hidden ${stylKafli}`}>
-                                                    {mamWpis && ktosInnyWpisal && (
-                                                        <span className="absolute top-2 right-2 flex h-2 w-2">
-                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                                                        </span>
-                                                    )}
-                                                    {mamWpis && !ktosInnyWpisal && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-500" />}
+        showLoading(false);
+        state.selectedInverter = "";
+        renderApp();
+        showStatusMessage("Pomiary przesłane pomyślnie!", "success");
+      })
+      .catch(error => {
+        showLoading(false);
+        console.error("Błąd POST:", error);
+        showStatusMessage("Błąd połączenia. Zapis do chmury nie powiódł się.", "error");
+      });
+    }
 
-                                                    <span className="text-xs font-extrabold text-white block group-hover:text-emerald-400 transition-colors">{wrKod}</span>
-                                                    <div className="mt-3">
-                                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Zużycie kabla</span>
-                                                        <span className="text-base font-black text-white group-hover:text-emerald-400 transition-colors">{sumaFalownika.toFixed(2)} m</span>
-                                                    </div>
+    function triggerFactoryReset() {
+      if (!state.apiUrl) return;
 
-                                                    {autorzy.length > 0 && (
-                                                        <div className="mt-2 pt-2 border-t border-neutral-800/50 text-[9px] text-neutral-400 flex flex-wrap gap-1 items-center">
-                                                            <span>Zapis:</span>
-                                                            {autorzy.map(function(aut) {
-                                                                return (
-                                                                    <span key={aut} className={`px-1.5 py-0.5 rounded font-bold ${aut === wybranyTeam ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                                                                        {aut}
-                                                                    </span>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+      showLoading(true, "Przywracanie ustawień fabrycznych...");
 
-                        {/* WIDOK 3: FORMULARZ WPISYWANIA METRÓW */}
-                        {wybranyTeam && wybranyFalownik && (
-                            <div className="space-y-6">
-                                {pobierzAutorowWR(wybranyFalownik, aktywnaZakladka === 'dc' ? 'DC' : 'AC').some(function(a) { return a !== wybranyTeam; }) && (
-                                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-2xl flex gap-3">
-                                        <Icon name="alert-triangle" className="h-5 w-5 shrink-0 mt-0.5 text-amber-400" />
-                                        <div className="text-xs space-y-1">
-                                            <h4 className="font-extrabold uppercase tracking-wide">TRYB WSPÓŁDZIELONY (INNY ZESPÓŁ TU WPISYWAŁ!)</h4>
-                                            <p className="text-neutral-300">
-                                                Inny zespół roboczy dodał już pomiary dla tego inwertera. Wszelkie zmiany są współdzielone na żywo. Możesz dopisać brakujące metry lub zmodyfikować odczyty.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
+      const body = {
+        action: "factoryReset"
+      };
 
-                                <div className="flex justify-between items-center">
-                                    <button onClick={() => setWybranyFalownik(null)} className="flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-white transition">
-                                        <Icon name="arrow-left" className="h-4 w-4" /> Wróć do Falowników
-                                    </button>
-                                    <span className="text-xs bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-emerald-400 rounded-full font-extrabold">{wybranyFalownik}</span>
-                                </div>
+      fetch(state.apiUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      .then(() => {
+        showLoading(false);
+        closeSettingsModal();
+        state.selectedTeam = "";
+        state.selectedInverter = "";
+        state.meters = [];
+        state.hasUnsavedChanges = false;
+        fetchData();
+        showStatusMessage("Wyczyszczono bazę i przywrócono stan fabryczny!", "success");
+      })
+      .catch(error => {
+        showLoading(false);
+        console.error("Błąd resetowania:", error);
+        showStatusMessage("Nie udało się przeprowadzić resetu.", "error");
+      });
+    }
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
-                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Suma Falownika {wybranyFalownik}</span>
-                                        <div className="text-2xl font-black text-emerald-400 tracking-tight mt-1">
-                                            {formularzWpisow.reduce(function(sum, w) { return sum + w.zuzycie; }, 0).toFixed(2)} m
-                                        </div>
-                                    </div>
-                                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
-                                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Edytujący Zespół</span>
-                                        <div className="text-lg font-extrabold text-white mt-1">{wybranyTeam}</div>
-                                    </div>
-                                </div>
+    // OBSŁUGA MODALI I USTAWIEŃ
+    function openSettingsModal() {
+      document.getElementById('input-api-url').value = state.apiUrl;
+      document.getElementById('settings-msg').className = "hidden text-[11px] p-2 rounded-lg";
+      document.getElementById('settings-modal').classList.remove('hidden');
+    }
 
-                                {/* FORMULARZ */}
-                                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-4">
-                                    <div className="flex justify-between items-center pb-3 border-b border-neutral-800">
-                                        <h3 className="font-black text-sm tracking-wider uppercase text-white">Wpisy Pomiarowe dla {wybranyFalownik}</h3>
-                                        <span className="text-[10px] text-neutral-500 font-extrabold uppercase">
-                                            {aktywnaZakladka === 'dc' ? 'Tryb ' + konfig.trybPracy.toUpperCase() : 'Tryb AC'}
-                                        </span>
-                                    </div>
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
 
-                                    {/* GENEROWANE POZYCJE (BĘBNY / STRINGI / AC) */}
-                                    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-                                        {formularzWpisow.map((wpis, index) => {
-                                            const toMójZapis = wpis.team === wybranyTeam;
-                                            const borderKola = toMójZapis ? 'border-emerald-500/30 bg-neutral-950' : 'border-amber-500/50 bg-amber-950/10';
+    function saveApiUrl() {
+      const inputVal = document.getElementById('input-api-url').value.trim();
+      const msg = document.getElementById('settings-msg');
 
-                                            return (
-                                                <div key={wpis.id} className={`border rounded-2xl p-4 space-y-4 transition ${borderKola}`}>
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-extrabold text-sm text-white">{wpis.numer.toUpperCase()}</span>
-                                                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${toMójZapis ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                                                                {toMójZapis ? 'Mój zespół' : 'Zapis: ' + wpis.team}
-                                                            </span>
-                                                        </div>
-                                                        {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && index > 0 && (
-                                                            <button onClick={() => usunBeben(index)} className="p-1 text-neutral-500 hover:text-red-400 transition">
-                                                                <Icon name="trash-2" className="h-4 w-4" />
-                                                            </button>
-                                                        )}
-                                                    </div>
+      if (!inputVal) {
+        msg.className = "text-[11px] p-2 rounded-lg bg-red-950/50 text-red-300 border border-red-500/20";
+        msg.innerText = "Adres URL nie może być pusty!";
+        msg.classList.remove('hidden');
+        return;
+      }
 
-                                                    <div className="grid grid-cols-3 gap-3">
-                                                        {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && (
-                                                            <div className="space-y-1">
-                                                                <label className="text-[10px] text-neutral-500 font-bold uppercase block">Dł. Całkowita</label>
-                                                                <input type="number" value={wpis.dlugosc || ''} onChange={(e) => zmienWpisFormularza(index, 'dlugosc', e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" placeholder="500" />
-                                                            </div>
-                                                        )}
-                                                        <div className="space-y-1">
-                                                            <label className="text-[10px] text-neutral-500 font-bold uppercase block">Start (m)</label>
-                                                            <input type="number" value={wpis.start || ''} onChange={(e) => zmienWpisFormularza(index, 'start', e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-[10px] text-neutral-500 font-bold uppercase block">Koniec (m)</label>
-                                                            <input type="number" value={wpis.koniec || ''} onChange={(e) => zmienWpisFormularza(index, 'koniec', e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none" />
-                                                        </div>
-                                                    </div>
+      state.apiUrl = inputVal;
+      localStorage.setItem('pv_cable_tracker_api_url', inputVal);
 
-                                                    <div className="flex justify-between items-center text-xs pt-1">
-                                                        <div className="flex gap-2">
-                                                            <span className="text-neutral-500">ZUŻYCIE:</span>
-                                                            <span className="font-extrabold text-emerald-400">{wpis.zuzycie.toFixed(2)} m</span>
-                                                        </div>
-                                                        {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && (
-                                                            <div className="flex gap-2">
-                                                                <span className="text-neutral-500">ZAPAS (POZOSTAŁO):</span>
-                                                                <span className="font-extrabold text-sky-400">{wpis.zapas.toFixed(2)} m</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+      msg.className = "text-[11px] p-2 rounded-lg bg-emerald-950/50 text-emerald-300 border border-emerald-500/20";
+      msg.innerText = "Adres API został zapisany.";
+      msg.classList.remove('hidden');
 
-                                    {konfig.trybPracy === 'Bębny' && aktywnaZakladka === 'dc' && (
-                                        <button onClick={dodajKolejnyBeben} className="w-full mt-2 py-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-xs font-bold text-neutral-300 rounded-2xl flex items-center justify-center gap-2">
-                                            <Icon name="plus" className="h-4 w-4 text-emerald-400" /> Dodaj kolejny Bęben
-                                        </button>
-                                    )}
-                                </div>
+      setTimeout(() => {
+        closeSettingsModal();
+        fetchData();
+      }, 800);
+    }
 
-                                <button onClick={zapiszFormularz} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-4 rounded-3xl font-black tracking-widest text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/10">
-                                    <Icon name="file-spreadsheet" className="h-5 w-5" /> ZAPISZ I WYŚLIJ DO ARKUSZA
-                                </button>
-                            </div>
-                        )}
-                    </main>
+    function showStatusMessage(text, type = "success") {
+      const banner = document.createElement('div');
+      banner.className = `fixed bottom-4 left-4 right-4 md:left-auto md:max-w-md md:right-4 z-50 p-4 rounded-xl border flex items-center gap-3 shadow-xl transition-all duration-300 fade-in ${
+        type === 'success' ? 'bg-zinc-900 border-emerald-500 text-emerald-400' : 'bg-zinc-900 border-red-500 text-red-400'
+      }`;
 
-                    <footer className="border-t border-neutral-900 bg-neutral-950 py-6 px-4 text-center text-xs text-neutral-600">
-                        <div>System Ewidencji Okablowania Budowy</div>
-                        <div className="mt-1 font-medium text-[10px] text-neutral-500 uppercase tracking-widest">Wszystkie dane pobierane i wysyłane bezpośrednio do Google Sheets</div>
-                    </footer>
-                </div>
-            );
-        }
+      const icon = type === 'success' 
+        ? `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`
+        : `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+      banner.innerHTML = `
+        <div class="shrink-0">${icon}</div>
+        <p class="text-xs font-bold">${text}</p>
+      `;
+
+      document.body.appendChild(banner);
+      setTimeout(() => {
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(20px)';
+        setTimeout(() => banner.remove(), 300);
+      }, 4000);
+    }
+
+    // Modal warnings controls
+    function openWarningModal() {
+      document.getElementById('custom-warning-modal').classList.remove('hidden');
+    }
+
+    function closeWarningModal() {
+      document.getElementById('custom-warning-modal').classList.add('hidden');
+    }
+
+    function confirmAbandonChanges() {
+      closeWarningModal();
+      state.hasUnsavedChanges = false;
+      state.selectedInverter = "";
+      renderApp();
+    }
+
+    // Generator UUID
+    function generateUUID() {
+      return 'rec-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+  </script>
 </body>
 </html>
