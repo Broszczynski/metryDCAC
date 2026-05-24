@@ -308,7 +308,7 @@
 
   <!-- STOPKA -->
   <footer class="mt-auto py-4 border-t border-zinc-900 bg-zinc-950/80 px-4 text-center">
-    <p class="text-[10px] text-zinc-600">PV Cable Tracker SPA v3.1.8 • System Ewidencji Zużycia Okablowania Solarnego</p>
+    <p class="text-[10px] text-zinc-600">PV Cable Tracker SPA v4.0 • System Ewidencji Zużycia Okablowania Solarnego</p>
   </footer>
 
   <!-- CORE SYSTEM JAVASCRIPT -->
@@ -320,13 +320,15 @@
         workMode: "Bębny",
         teamsCount: 2,
         trafos: { "Trafo 1": 12, "Trafo 2": 12 },
-        stringsCount: 12
+        stringsCount: 12,
+        completionStatus: { DC: {}, AC: {} } // Inicjalizacja lokalnego bufora statusów
       },
       meters: [], 
       selectedTeam: "",
       selectedTrafoFilter: "Wszystkie",
       selectedInverter: "", 
       selectedTrafo: "",    
+      activeTrafo: "", // Dodano dla pewności w DC
       localEntries: [], 
       hasUnsavedChanges: false,
       editMode: false, 
@@ -582,27 +584,25 @@
       renderApp();
     }
 
+    // Odczyt z dedykowanej tabeli (z awaryjnym starym filtrem)
     function isInverterCompleted(inverterName, cableType = state.selectedCableType) {
-      // 1. Sprawdzamy stan przesłany z dedykowanej tabeli G-K
       if (state.config.completionStatus && state.config.completionStatus.DC) {
         if (state.config.completionStatus.DC[inverterName] !== undefined) {
           return state.config.completionStatus.DC[inverterName];
         }
       }
-      // 2. Fallback do starych pomiarów
       const records = state.meters.filter(m => m.Falownik_WR === inverterName && getCableType(m) === cableType);
       if (records.length === 0) return false;
       return records.some(r => r.Zakonczono === true || r.Zakonczono === "true" || r.Zakonczono === 1 || r.Zakonczono === "1");
     }
 
+    // Odczyt z dedykowanej tabeli (z awaryjnym starym filtrem)
     function isTrafoCompletedAC(trafoName) {
-      // 1. Sprawdzamy stan przesłany z dedykowanej tabeli G-K
       if (state.config.completionStatus && state.config.completionStatus.AC) {
         if (state.config.completionStatus.AC[trafoName] !== undefined) {
           return state.config.completionStatus.AC[trafoName];
         }
       }
-      // 2. Fallback do starych pomiarów
       const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "");
       const records = state.meters.filter(m => getCableType(m) === "AC" && String(m.Trafostacja) === cleanTrafoNum);
       if (records.length === 0) return false;
@@ -659,7 +659,7 @@
             let dotHTML = "";
             let textClass = "";
 
-            if (hasData) {
+            if (hasData || isCompleted) {
               if (isCompleted) {
                 cardClass = "bg-zinc-900 border-emerald-500/50 hover:border-emerald-500 shadow-neon-glow";
                 textClass = "text-emerald-400";
@@ -709,7 +709,7 @@
           let dotHTML = "";
           let textClass = "";
 
-          if (hasData) {
+          if (hasData || isCompleted) {
             if (isCompleted) {
               cardClass = "bg-zinc-900 border-emerald-500/50 hover:border-emerald-500 shadow-neon-glow";
               textClass = "text-emerald-400";
@@ -1434,7 +1434,6 @@
 
       const payloadDate = new Date().toLocaleString("pl-PL");
       
-      // ZAKTUALIZOWANA LOGIKA FILTROWANIA - uwzględnia pole isEdited
       const activeEntries = state.localEntries.filter(e => 
         e.isEdited || 
         (parseFloat(e.Zuzycie) || 0) > 0 || 
@@ -1471,11 +1470,22 @@
         state.hasUnsavedChanges = false;
         state.editMode = false;
         
+        // Zabezpieczenie na wypadek braku obiektu w cache
+        if (!state.config.completionStatus) state.config.completionStatus = { DC: {}, AC: {} };
+        
         if (state.selectedCableType === "DC") {
           state.meters = state.meters.filter(m => !(m.Falownik_WR === state.selectedInverter && getCableType(m) === "DC"));
+          
+          // Błyskawiczna lokalna aktualizacja statusu GOTOWE by uciec przed opóźnieniem chmury
+          if (!state.config.completionStatus.DC) state.config.completionStatus.DC = {};
+          state.config.completionStatus.DC[state.selectedInverter] = state.isCompleted;
         } else {
           const cleanTrafoNum = state.selectedTrafo.replace(/[^0-9]/g, "");
           state.meters = state.meters.filter(m => !(String(m.Trafostacja) === cleanTrafoNum && getCableType(m) === "AC"));
+
+          // Błyskawiczna lokalna aktualizacja statusu GOTOWE by uciec przed opóźnieniem chmury
+          if (!state.config.completionStatus.AC) state.config.completionStatus.AC = {};
+          state.config.completionStatus.AC[state.selectedTrafo] = state.isCompleted;
         }
         
         state.meters = state.meters.concat(mappedPayload);
