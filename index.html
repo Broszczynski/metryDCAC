@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PV Cable Tracker - Ewidencja Zużycia Kabla DC</title>
+  <title>PV Cable Tracker - Ewidencja Zużycia Kabla DC/AC</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -21,14 +21,14 @@
           boxShadow: {
             'neon-glow': '0 0 15px rgba(16, 185, 129, 0.35)',
             'neon-glow-lg': '0 0 25px rgba(16, 185, 129, 0.5)',
-            'amber-glow': '0 0 15px rgba(245, 158, 11, 0.25)'
+            'amber-glow': '0 0 15px rgba(245, 158, 11, 0.35)',
+            'amber-glow-lg': '0 0 25px rgba(245, 158, 11, 0.5)'
           }
         }
       }
     }
   </script>
   <style>
-    /* Custom scrollbars and styling enhancements for Dark Mode */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -64,24 +64,34 @@
 <body class="bg-zinc-950 text-zinc-100 font-sans antialiased min-h-screen flex flex-col selection:bg-emerald-500 selection:text-black">
 
   <!-- TOP NAVIGATION / HEADER -->
-  <header class="sticky top-0 z-40 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 px-4 py-3 flex items-center justify-between shadow-lg">
+  <header class="sticky top-0 z-40 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 px-4 py-1.5 flex items-center justify-between shadow-lg">
     <div class="flex items-center space-x-2">
-      <div class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"></div>
-      <h1 class="text-sm md:text-base font-bold tracking-wider text-emerald-400">PV CABLE TRACKER</h1>
+      <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"></div>
+      <h1 class="text-xs md:text-sm font-bold tracking-wider text-emerald-400">PV CABLE TRACKER</h1>
     </div>
     <div class="flex items-center space-x-2">
       <!-- Network Status Badge -->
-      <span id="network-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1">
+      <span id="network-badge" class="text-[9px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1">
         <span class="w-1.5 h-1.5 rounded-full bg-zinc-500" id="network-dot"></span>
         <span id="network-text">Offline</span>
       </span>
       <!-- Sync Button -->
-      <button onclick="fetchData()" id="btn-sync" class="touch-target p-2 text-zinc-400 hover:text-emerald-400 transition-colors rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700" title="Synchronizuj dane">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+      <button onclick="fetchData()" id="btn-sync" class="p-1.5 text-zinc-400 hover:text-emerald-400 transition-colors rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 flex items-center justify-center" title="Synchronizuj dane">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a10 10 0 0 1 10 10" />
+          <path d="M22 7v5h-5" />
+          <path d="M22 12a10 10 0 0 1-15 8.66" />
+          <path d="M11 21H6v-5" />
+          <path d="M7 20.66A10 10 0 0 1 12 2" />
+          <path d="M7 6V1h5" />
+        </svg>
       </button>
       <!-- Settings Button -->
-      <button onclick="openSettingsModal()" class="touch-target p-2 text-zinc-400 hover:text-emerald-400 transition-colors rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700" title="Ustawienia">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+      <button onclick="openSettingsModal()" class="p-1.5 text-zinc-400 hover:text-emerald-400 transition-colors rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 flex items-center justify-center" title="Ustawienia">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
       </button>
     </div>
   </header>
@@ -98,24 +108,37 @@
   <!-- MAIN APP CONTAINER -->
   <main class="flex-grow p-4 md:max-w-4xl md:mx-auto w-full flex flex-col justify-start">
 
-    <!-- ======================================================= -->
-    <!-- SCREEN 1: TEAM SELECTION (KROK 1) -->
-    <!-- ======================================================= -->
+    <!-- PRZEŁĄCZNIK DC / AC -->
+    <div id="cable-type-switcher-container" class="mb-4">
+      <!-- Generowany dynamicznie w renderApp() -->
+    </div>
+
+    <!-- SCREEN 1: TEAM SELECTION -->
     <section id="view-step-team" class="fade-in space-y-4">
-      <div class="text-center py-4">
-        <h2 class="text-xl font-extrabold text-zinc-100 tracking-tight">KROK 1: Wybór Zespołu</h2>
-        <p class="text-xs text-zinc-400 mt-1">Wybierz swój zespół, aby rozpocząć ewidencjonowanie pomiarów kabli</p>
+      <div class="text-center py-2">
+        <h2 class="text-xl font-extrabold text-zinc-100 tracking-tight" id="step1-title">KROK 1: Wybór Zespołu (DC)</h2>
+        <p class="text-xs text-zinc-400 mt-1">Wybierz swój zespół, aby rozpocząć ewidencjonowanie pomiarów</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3" id="stats-cards-row">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex flex-col justify-between">
+          <span class="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">Suma całkowita</span>
+          <span id="grand-total-display" class="text-sm font-extrabold text-emerald-400 mt-1">0.00 m</span>
+        </div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex flex-col justify-between" id="work-mode-card">
+          <span class="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">Tryb pracy</span>
+          <span id="work-mode-display" class="text-xs font-bold text-zinc-200 mt-1">Bębny</span>
+        </div>
       </div>
       
       <div id="team-list-container" class="grid grid-cols-1 gap-3">
         <!-- Zespoły renderowane dynamicznie -->
       </div>
 
-      <!-- SYSTEM RAPORTÓW DZIENNYCH -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-6 shadow-xl">
         <h3 class="text-xs font-black text-emerald-400 uppercase tracking-widest mb-3 flex items-center gap-2">
           <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-          Dzienny Raport Zużycia Kabla
+          Dzienny Raport Zużycia Kabla <span id="daily-report-suffix"></span>
         </h3>
         <p class="text-[11px] text-zinc-400 mb-4">Poniższe zestawienie pokazuje sumaryczne zużycie w podziale na dni robocze dla każdego zespołu.</p>
         <div id="daily-reports-container" class="space-y-3 max-h-[350px] overflow-y-auto pr-1">
@@ -124,11 +147,8 @@
       </div>
     </section>
 
-    <!-- ======================================================= -->
-    <!-- SCREEN 2: INVERTER SELECTION (KROK 2) -->
-    <!-- ======================================================= -->
+    <!-- SCREEN 2: INVERTER/TRAFO SELECTION -->
     <section id="view-step-inverters" class="fade-in space-y-4 hidden">
-      <!-- Przycisk powrotu do Kroku 1 -->
       <button onclick="goBackToStep1()" class="touch-target flex items-center space-x-1.5 text-zinc-400 hover:text-emerald-400 text-sm font-semibold transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         <span>Wróć do Zespołów</span>
@@ -145,85 +165,72 @@
         </div>
       </div>
 
-      <!-- FILTR TRAFO -->
-      <div>
+      <div id="trafo-filter-section">
         <span class="text-xs text-zinc-400 font-bold uppercase tracking-wider mb-2 block">Filtr Trafostacji (Zużycie)</span>
         <div id="trafo-filter-container" class="flex flex-wrap gap-2 overflow-x-auto pb-1">
           <!-- Przyciski filtrów renderowane dynamicznie -->
         </div>
       </div>
 
-      <!-- LISTA INWERTERÓW -->
       <div class="space-y-2">
         <div class="flex justify-between items-center">
-          <span class="text-xs text-zinc-400 font-bold uppercase tracking-wider">Wybór Falownika (WR)</span>
+          <span class="text-xs text-zinc-400 font-bold uppercase tracking-wider" id="krok2-grid-title">Wybór Falownika (WR)</span>
           <span class="text-[11px] text-zinc-500 font-medium">Kliknij kafelek, aby przejść do pomiarów</span>
         </div>
         <div id="inverters-list-container" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <!-- Inwertery renderowane dynamicznie -->
+          <!-- Falowniki/Trafa renderowane dynamicznie -->
         </div>
       </div>
     </section>
 
-    <!-- ======================================================= -->
-    <!-- SCREEN 3: MONTER INPUT FORM (KROK 3) -->
-    <!-- ======================================================= -->
+    <!-- SCREEN 3: MONTER INPUT FORM -->
     <section id="view-step-monter-form" class="fade-in space-y-4 hidden">
-      <!-- Nawigacja wstecz i wskaźniki statusu -->
-      <div class="flex items-center justify-between">
-        <button onclick="handleBackFromForm()" class="touch-target flex items-center space-x-1.5 text-zinc-400 hover:text-emerald-400 text-sm font-semibold transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-          <span>Wróć do Falowników</span>
+      <div class="flex items-center justify-between flex-wrap gap-3 bg-zinc-900 border border-zinc-800/80 p-3 rounded-2xl shadow-md">
+        <button onclick="handleBackFromForm()" class="touch-target flex items-center justify-center text-zinc-300 hover:text-emerald-400 text-lg font-black transition-colors w-10 h-10 bg-zinc-950 border border-zinc-800 rounded-xl" title="Wróć">
+          &lt;
         </button>
-        <div class="flex items-center space-x-2">
-          <!-- Plakietka aktywnego zespołu -->
-          <span id="active-team-badge" class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold tracking-wider">
+        
+        <div class="flex items-center space-x-1.5 ml-auto flex-wrap gap-y-1">
+          <div class="flex items-center bg-zinc-950 border border-zinc-850 rounded-xl px-2 h-10 space-x-2">
+            <span class="text-[9px] font-black text-zinc-500 uppercase tracking-wider select-none">Gotowe</span>
+            <button id="toggle-completion" onclick="toggleCompletionStatus()" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-amber-500/10 border-amber-500/30" role="switch" aria-checked="false">
+              <span id="toggle-completion-dot" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-amber-500 shadow-lg ring-0 transition duration-200 ease-in-out translate-x-5"></span>
+            </button>
+          </div>
+
+          <button id="btn-save-send-top" onclick="submitMetersToServer()" class="touch-target w-10 h-10 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl shadow-neon-glow hover:shadow-neon-glow-lg transition-all flex items-center justify-center" title="Zapisz i wyślij do chmury">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3"></path>
+            </svg>
+          </button>
+
+          <span id="top-drums-counter" class="text-[11px] font-black text-zinc-300 bg-zinc-950 border border-zinc-850 px-2.5 h-10 rounded-xl flex items-center whitespace-nowrap">
+            B:1
+          </span>
+
+          <span id="active-team-badge" class="h-10 px-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold tracking-wider flex items-center">
             Brak
           </span>
-          <!-- Plakietka aktywnego falownika -->
-          <span id="active-inverter-badge" class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold tracking-wider">
+          
+          <span id="active-inverter-badge" class="h-10 px-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold tracking-wider flex items-center">
             WR 1.1
           </span>
         </div>
       </div>
 
-      <!-- Dynamiczny Współdzielony Baner Współpracy (Zastępuje sztywną blokadę) -->
-      <div id="collaboration-warning-badge" class="hidden bg-amber-950/80 border border-amber-500/30 text-amber-200 rounded-xl p-3 flex items-start gap-2.5">
-        <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-        <div>
-          <h4 class="text-xs font-bold text-amber-300">FALOWNIK WSPÓŁDZIELONY (MULTIPLE TEAMS)</h4>
-          <p class="text-[11px] text-amber-200/80 mt-0.5">Wykryto pomiary wprowadzone przez inny zespół (<span id="other-teams-names" class="font-bold underline"></span>). Możesz swobodnie edytować istniejące dane, uzupełniać kolejne stringi lub dodawać nowe bębny dla swojego zespołu.</p>
-        </div>
-      </div>
-
-      <!-- FORMULARZ POMIAROWY -->
       <div id="monter-fields-card" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl">
-        <h3 class="text-sm font-bold text-zinc-200 mb-4 pb-2 border-b border-zinc-800 flex items-center justify-between">
-          <span>Wpisy Pomiarowe</span>
-          <span id="form-mode-title" class="text-xs text-zinc-500 uppercase tracking-wider">Tryb Bębnów</span>
-        </h3>
-
-        <!-- Dynamiczna lista wierszy pomiarów -->
-        <div id="records-list" class="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+        <div id="records-list" class="space-y-4">
           <!-- Generowane dynamicznie -->
         </div>
 
-        <!-- Dodawanie bębna -->
-        <div class="mt-4 pt-4 border-t border-zinc-800 flex justify-between items-center" id="form-actions-row">
-          <button type="button" onclick="addNewRecordRow()" id="btn-add-row" class="touch-target px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 hover:text-emerald-300 border border-zinc-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-            Dodaj kolejny Bęben
+        <div class="mt-6 pt-4 border-t border-zinc-800">
+          <button onclick="submitMetersToServer()" class="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm rounded-xl shadow-neon-glow hover:shadow-neon-glow-lg transition-all flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3"></path>
+            </svg>
+            ZAPISZ WSZYSTKIE POMIARY
           </button>
-          <span class="text-[10px] text-zinc-500" id="total-rows-counter">Bębny: 1</span>
         </div>
-      </div>
-
-      <!-- Akcje zapisu (Zawsze widoczne dla wszystkich zespołów) -->
-      <div class="pt-2">
-        <button id="btn-save-send" onclick="submitMetersToServer()" class="touch-target w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-xl shadow-neon-glow hover:shadow-neon-glow-lg transition-all flex items-center justify-center gap-2">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3"></path></svg>
-          ZAPISZ I WYŚLIJ DO CHMURY
-        </button>
       </div>
     </section>
 
@@ -236,7 +243,7 @@
         <svg class="w-8 h-8 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
         <h3 class="text-base font-extrabold text-zinc-100 tracking-tight">NIEWYSŁANE POMIARY!</h3>
       </div>
-      <p class="text-xs text-zinc-300 leading-relaxed">Wykryto brak synchronizacji danych dla tego falownika z bazą Google Sheets. Opuszczenie widoku spowoduje bezpowrotną utratę wprowadzonych zmian.</p>
+      <p class="text-xs text-zinc-300 leading-relaxed">Wykryto brak synchronizacji danych dla tego obiektu z bazą Google Sheets. Opuszczenie widoku spowoduje bezpowrotną utratę wprowadzonych zmian.</p>
       <div class="grid grid-cols-2 gap-3 pt-2">
         <button onclick="confirmAbandonChanges()" class="touch-target px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-xl text-xs font-bold transition-all">
           PORZUĆ ZMIANY
@@ -280,14 +287,12 @@
         </button>
       </div>
 
-      <!-- App Script API URL -->
       <div class="space-y-1">
         <label for="input-api-url" class="text-xs font-bold text-zinc-400 block">Google Web App URL (Apps Script):</label>
         <input type="text" id="input-api-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors">
         <p class="text-[10px] text-zinc-500">Wklej pełny URL aplikacji sieciowej wdrożonej w edytorze skryptów Arkusza.</p>
       </div>
 
-      <!-- Komunikat powiadomień ustawień -->
       <div id="settings-msg" class="hidden text-[11px] p-2 rounded-lg"></div>
 
       <div class="grid grid-cols-2 gap-3 pt-2">
@@ -303,13 +308,14 @@
 
   <!-- STOPKA -->
   <footer class="mt-auto py-4 border-t border-zinc-900 bg-zinc-950/80 px-4 text-center">
-    <p class="text-[10px] text-zinc-600">PV Cable Tracker SPA v2.3.0 • System Ewidencji Zużycia Okablowania Solarnego</p>
+    <p class="text-[10px] text-zinc-600">PV Cable Tracker SPA v3.1.8 • System Ewidencji Zużycia Okablowania Solarnego</p>
   </footer>
 
   <!-- CORE SYSTEM JAVASCRIPT -->
   <script>
     let state = {
       apiUrl: localStorage.getItem('pv_cable_tracker_api_url') || '',
+      selectedCableType: "DC", 
       config: {
         workMode: "Bębny",
         teamsCount: 2,
@@ -319,9 +325,12 @@
       meters: [], 
       selectedTeam: "",
       selectedTrafoFilter: "Wszystkie",
-      selectedInverter: "",
+      selectedInverter: "", 
+      selectedTrafo: "",    
       localEntries: [], 
-      hasUnsavedChanges: false
+      hasUnsavedChanges: false,
+      editMode: false, 
+      isCompleted: false 
     };
 
     let pendingDeleteIndex = null;
@@ -348,26 +357,61 @@
       if (navigator.onLine) {
         dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]";
         text.innerText = "Online";
-        badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1";
+        badge.className = "text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1";
       } else {
         dot.className = "w-1.5 h-1.5 rounded-full bg-zinc-500";
         text.innerText = "Offline";
-        badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 border border-zinc-700 flex items-center gap-1";
+        badge.className = "text-[9px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 border border-zinc-700 flex items-center gap-1";
       }
     }
 
+    function getCableType(entry) {
+      return entry.Typ_Kabla || "DC";
+    }
+
     function renderApp() {
+      renderCableTypeSwitcher();
+
       if (!state.selectedTeam) {
         showView('view-step-team');
         renderTeamSelection();
         renderDailyReports();
-      } else if (!state.selectedInverter) {
+      } else if ((state.selectedCableType === "DC" && !state.selectedInverter) || (state.selectedCableType === "AC" && !state.selectedTrafo)) {
         showView('view-step-inverters');
         renderInverterSelection();
       } else {
         showView('view-step-monter-form');
         renderMonterForm();
       }
+    }
+
+    function renderCableTypeSwitcher() {
+      const switcherContainer = document.getElementById('cable-type-switcher-container');
+      const isEditing = (state.selectedCableType === "DC" && state.selectedInverter) || (state.selectedCableType === "AC" && state.selectedTrafo);
+
+      if (!isEditing) {
+        switcherContainer.innerHTML = `
+          <div class="bg-zinc-900/80 p-1.5 rounded-2xl border border-zinc-800 flex w-full shadow-lg">
+            <button onclick="setCableType('DC')" class="flex-1 py-2.5 text-center text-xs font-black rounded-xl transition-all ${state.selectedCableType === 'DC' ? 'bg-emerald-500 text-black shadow-neon-glow' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30'}">KABLE DC</button>
+            <button onclick="setCableType('AC')" class="flex-1 py-2.5 text-center text-xs font-black rounded-xl transition-all ${state.selectedCableType === 'AC' ? 'bg-emerald-500 text-black shadow-neon-glow' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30'}">KABLE AC</button>
+          </div>
+        `;
+        switcherContainer.classList.remove('hidden');
+      } else {
+        switcherContainer.classList.add('hidden');
+      }
+    }
+
+    function setCableType(type) {
+      if (state.hasUnsavedChanges) {
+        openWarningModal();
+        return;
+      }
+      state.selectedCableType = type;
+      state.selectedTeam = "";
+      state.selectedInverter = "";
+      state.selectedTrafo = "";
+      renderApp();
     }
 
     function showView(viewId) {
@@ -382,35 +426,36 @@
       });
     }
 
-    // POMOCNIK FORMATOWANIA DATY
     function getCleanDateString(dateVal) {
       if (!dateVal) return "Brak daty";
-      
       let d = new Date(dateVal);
       if (!isNaN(d.getTime())) {
         return d.toLocaleDateString("pl-PL");
       }
-      
       const match = String(dateVal).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
       if (match) {
         return `${match[1].padStart(2, '0')}.${match[2].padStart(2, '0')}.${match[3]}`;
       }
-      
       const isoMatch = String(dateVal).match(/(\d{4})-(\d{2})-(\d{2})/);
       if (isoMatch) {
         return `${isoMatch[3]}.${isoMatch[2]}.${isoMatch[1]}`;
       }
-      
       return String(dateVal).split(',')[0];
     }
 
-    // GENEROWANIE DZIENNEGO RAPORTU ZUŻYCIA
     function renderDailyReports() {
       const container = document.getElementById('daily-reports-container');
       container.innerHTML = "";
+      
+      const suffixEl = document.getElementById('daily-report-suffix');
+      if (suffixEl) {
+        suffixEl.innerText = `(${state.selectedCableType})`;
+      }
 
       const report = {};
       state.meters.forEach(entry => {
+        if (getCableType(entry) !== state.selectedCableType) return;
+
         const dateStr = getCleanDateString(entry.Data_Wpisu);
         const team = entry.Team || "Brak Zespołu";
         const zuzycie = parseFloat(entry.Zuzycie) || 0;
@@ -440,7 +485,7 @@
       if (dates.length === 0) {
         container.innerHTML = `
           <div class="text-center py-6 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
-            Brak wpisów pomiarowych do wyświetlenia raportu.
+            Brak wpisów pomiarowych do wyświetlenia raportu dla trybu ${state.selectedCableType}.
           </div>
         `;
         return;
@@ -476,15 +521,34 @@
       });
     }
 
-    // KROK 1: WYBÓR ZESPOŁU
     function renderTeamSelection() {
+      const grandTotalEl = document.getElementById('grand-total-display');
+      if (grandTotalEl) {
+        grandTotalEl.innerText = `${calculateGrandTotal(state.selectedCableType).toFixed(2)} m`;
+      }
+
+      const step1Title = document.getElementById('step1-title');
+      if (step1Title) {
+        step1Title.innerText = `KROK 1: Wybór Zespołu (${state.selectedCableType})`;
+      }
+
+      const workModeCard = document.getElementById('work-mode-card');
+      const workModeEl = document.getElementById('work-mode-display');
+      
+      if (state.selectedCableType === "DC") {
+        if (workModeCard) workModeCard.classList.remove('hidden');
+        if (workModeEl) workModeEl.innerText = state.config.workMode || "Bębny";
+      } else {
+        if (workModeCard) workModeCard.classList.add('hidden');
+      }
+
       const container = document.getElementById('team-list-container');
       container.innerHTML = "";
 
       const teamCount = state.config.teamsCount || 2;
       for (let i = 1; i <= teamCount; i++) {
         const teamName = `Team ${i}`;
-        const teamTotal = calculateTeamTotal(teamName);
+        const teamTotal = calculateTeamTotal(teamName, state.selectedCableType);
 
         const card = document.createElement('button');
         card.type = "button";
@@ -497,7 +561,7 @@
               T${i}
             </div>
             <div>
-              <span class="text-xs text-zinc-500 font-medium">ZESPÓŁ ROBOCZY</span>
+              <span class="text-xs text-zinc-500 font-medium">ZESPÓŁ ROBOCZY (${state.selectedCableType})</span>
               <h4 class="text-base font-extrabold text-zinc-100">${teamName}</h4>
             </div>
           </div>
@@ -518,62 +582,167 @@
       renderApp();
     }
 
-    // KROK 2: WYBÓR FALOWNIKA
+    function isInverterCompleted(inverterName, cableType = state.selectedCableType) {
+      // 1. Sprawdzamy stan przesłany z dedykowanej tabeli G-K
+      if (state.config.completionStatus && state.config.completionStatus.DC) {
+        if (state.config.completionStatus.DC[inverterName] !== undefined) {
+          return state.config.completionStatus.DC[inverterName];
+        }
+      }
+      // 2. Fallback do starych pomiarów
+      const records = state.meters.filter(m => m.Falownik_WR === inverterName && getCableType(m) === cableType);
+      if (records.length === 0) return false;
+      return records.some(r => r.Zakonczono === true || r.Zakonczono === "true" || r.Zakonczono === 1 || r.Zakonczono === "1");
+    }
+
+    function isTrafoCompletedAC(trafoName) {
+      // 1. Sprawdzamy stan przesłany z dedykowanej tabeli G-K
+      if (state.config.completionStatus && state.config.completionStatus.AC) {
+        if (state.config.completionStatus.AC[trafoName] !== undefined) {
+          return state.config.completionStatus.AC[trafoName];
+        }
+      }
+      // 2. Fallback do starych pomiarów
+      const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "");
+      const records = state.meters.filter(m => getCableType(m) === "AC" && String(m.Trafostacja) === cleanTrafoNum);
+      if (records.length === 0) return false;
+      return records.some(r => r.Zakonczono === true || r.Zakonczono === "true" || r.Zakonczono === 1 || r.Zakonczono === "1");
+    }
+
     function renderInverterSelection() {
-      document.getElementById('selected-team-display').innerText = state.selectedTeam;
-      document.getElementById('team-total-display').innerText = `${calculateTeamTotal(state.selectedTeam).toFixed(2)} m`;
+      document.getElementById('selected-team-display').innerText = `${state.selectedTeam} (${state.selectedCableType})`;
+      document.getElementById('team-total-display').innerText = `${calculateTeamTotal(state.selectedTeam, state.selectedCableType).toFixed(2)} m`;
 
-      const filterContainer = document.getElementById('trafo-filter-container');
-      filterContainer.innerHTML = "";
-
-      const btnAll = document.createElement('button');
-      btnAll.className = `px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${state.selectedTrafoFilter === 'Wszystkie' ? 'bg-emerald-500 text-black border-emerald-500 shadow-neon-glow' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'}`;
-      btnAll.innerText = `Wszystkie (${calculateGrandTotal().toFixed(2)} m)`;
-      btnAll.onclick = () => filterTrafos('Wszystkie');
-      filterContainer.appendChild(btnAll);
-
-      Object.keys(state.config.trafos).forEach(trafoName => {
-        const trafoSum = calculateTrafoTotal(trafoName);
-        const btn = document.createElement('button');
-        btn.className = `px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${state.selectedTrafoFilter === trafoName ? 'bg-emerald-500 text-black border-emerald-500 shadow-neon-glow' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'}`;
-        btn.innerText = `${trafoName} (${trafoSum.toFixed(2)} m)`;
-        btn.onclick = () => filterTrafos(trafoName);
-        filterContainer.appendChild(btn);
-      });
-
+      const filterSection = document.getElementById('trafo-filter-section');
+      const gridTitle = document.getElementById('krok2-grid-title');
       const invertersContainer = document.getElementById('inverters-list-container');
+      
       invertersContainer.innerHTML = "";
 
-      Object.entries(state.config.trafos).forEach(([trafoName, wrCount]) => {
-        if (state.selectedTrafoFilter !== 'Wszystkie' && state.selectedTrafoFilter !== trafoName) return;
+      if (state.selectedCableType === "DC") {
+        if (filterSection) filterSection.classList.remove('hidden');
+        if (gridTitle) gridTitle.innerText = "Wybór Falownika (WR)";
 
-        const trafoNum = trafoName.replace(/[^0-9]/g, "") || "1";
+        const filterContainer = document.getElementById('trafo-filter-container');
+        filterContainer.innerHTML = "";
 
-        for (let j = 1; j <= wrCount; j++) {
-          const inverterName = `WR ${trafoNum}.${j}`;
-          const inverterTotal = calculateInverterTotal(inverterName);
-          const hasData = inverterTotal > 0;
-          
-          const firstTeam = getInverterTeamOwner(inverterName);
+        const btnAll = document.createElement('button');
+        btnAll.className = `px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${state.selectedTrafoFilter === 'Wszystkie' ? 'bg-emerald-500 text-black border-emerald-500 shadow-neon-glow' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'}`;
+        btnAll.innerText = `Wszystkie (${calculateGrandTotal("DC").toFixed(2)} m)`;
+        btnAll.onclick = () => filterTrafos('Wszystkie');
+        filterContainer.appendChild(btnAll);
+
+        Object.keys(state.config.trafos).forEach(trafoName => {
+          const trafoSum = calculateTrafoTotal(trafoName, "DC");
+          const btn = document.createElement('button');
+          btn.className = `px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${state.selectedTrafoFilter === trafoName ? 'bg-emerald-500 text-black border-emerald-500 shadow-neon-glow' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'}`;
+          btn.innerText = `${trafoName} (${trafoSum.toFixed(2)} m)`;
+          btn.onclick = () => filterTrafos(trafoName);
+          filterContainer.appendChild(btn);
+        });
+
+        Object.entries(state.config.trafos).forEach(([trafoName, wrCount]) => {
+          if (state.selectedTrafoFilter !== 'Wszystkie' && state.selectedTrafoFilter !== trafoName) return;
+
+          const trafoNum = trafoName.replace(/[^0-9]/g, "") || "1";
+
+          for (let j = 1; j <= wrCount; j++) {
+            const inverterName = `WR ${trafoNum}.${j}`;
+            const inverterTotal = calculateInverterTotal(inverterName, "DC");
+            const inverterRecords = state.meters.filter(m => m.Falownik_WR === inverterName && getCableType(m) === "DC");
+            const hasData = inverterRecords.length > 0;
+            const isCompleted = isInverterCompleted(inverterName, "DC");
+            
+            const firstTeam = getInverterTeamOwner(inverterName, "DC");
+
+            let cardClass = "";
+            let dotHTML = "";
+            let textClass = "";
+
+            if (hasData) {
+              if (isCompleted) {
+                cardClass = "bg-zinc-900 border-emerald-500/50 hover:border-emerald-500 shadow-neon-glow";
+                textClass = "text-emerald-400";
+                dotHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]"></span>`;
+              } else {
+                cardClass = "bg-zinc-900 border-amber-500/50 hover:border-amber-500 shadow-amber-glow";
+                textClass = "text-amber-400";
+                dotHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]"></span>`;
+              }
+            } else {
+              cardClass = "bg-zinc-900/45 border-zinc-800/80 hover:border-zinc-850";
+              textClass = "text-zinc-400";
+              dotHTML = "";
+            }
+
+            const button = document.createElement('button');
+            button.className = `touch-target p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all group ${cardClass}`;
+            button.onclick = () => selectInverter(inverterName, trafoName);
+
+            button.innerHTML = `
+              <div class="flex items-center justify-between w-full">
+                <span class="text-xs font-black text-zinc-100 tracking-wide group-hover:text-emerald-400 transition-colors">${inverterName}</span>
+                ${dotHTML}
+              </div>
+              <div class="mt-4">
+                <span class="text-[9px] text-zinc-500 uppercase font-semibold block tracking-wider">Zużycie kabla</span>
+                <span class="text-sm font-extrabold ${textClass}">${inverterTotal.toFixed(2)} m</span>
+                ${firstTeam ? `<span class="text-[8px] block text-zinc-500 font-bold tracking-tight mt-1 truncate">Zapis: ${firstTeam}</span>` : ''}
+              </div>
+            `;
+            invertersContainer.appendChild(button);
+          }
+        });
+      } else {
+        if (filterSection) filterSection.classList.add('hidden');
+        if (gridTitle) gridTitle.innerText = "Wybór Trafostacji (AC)";
+
+        Object.keys(state.config.trafos).forEach(trafoName => {
+          const trafoSum = calculateTrafoTotal(trafoName, "AC");
+          const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "");
+          const trafoRecords = state.meters.filter(m => getCableType(m) === "AC" && String(m.Trafostacja) === cleanTrafoNum);
+          const hasData = trafoRecords.length > 0;
+          const isCompleted = isTrafoCompletedAC(trafoName);
+          const firstTeam = getTrafoTeamOwnerAC(trafoName);
+
+          let cardClass = "";
+          let dotHTML = "";
+          let textClass = "";
+
+          if (hasData) {
+            if (isCompleted) {
+              cardClass = "bg-zinc-900 border-emerald-500/50 hover:border-emerald-500 shadow-neon-glow";
+              textClass = "text-emerald-400";
+              dotHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]"></span>`;
+            } else {
+              cardClass = "bg-zinc-900 border-amber-500/50 hover:border-amber-500 shadow-amber-glow";
+              textClass = "text-amber-400";
+              dotHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]"></span>`;
+            }
+          } else {
+            cardClass = "bg-zinc-900/45 border-zinc-800/80 hover:border-zinc-850";
+            textClass = "text-zinc-400";
+            dotHTML = "";
+          }
 
           const button = document.createElement('button');
-          button.className = `touch-target p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all group ${hasData ? 'bg-zinc-900 border-emerald-500/30 hover:border-emerald-500/70 shadow-neon-glow' : 'bg-zinc-900/45 border-zinc-800/80 hover:border-zinc-800'}`;
-          button.onclick = () => selectInverter(inverterName, trafoName);
+          button.className = `touch-target p-4 rounded-2xl border text-left flex flex-col justify-between transition-all group ${cardClass}`;
+          button.onclick = () => selectTrafoAC(trafoName);
 
           button.innerHTML = `
             <div class="flex items-center justify-between w-full">
-              <span class="text-xs font-black text-zinc-100 tracking-wide group-hover:text-emerald-400 transition-colors">${inverterName}</span>
-              ${hasData ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]"></span>` : ''}
+              <span class="text-sm font-black text-zinc-100 tracking-wide group-hover:text-emerald-400 transition-colors">${trafoName}</span>
+              ${dotHTML}
             </div>
             <div class="mt-4">
-              <span class="text-[9px] text-zinc-500 uppercase font-semibold block tracking-wider">Zużycie kabla</span>
-              <span class="text-sm font-extrabold ${hasData ? 'text-emerald-400' : 'text-zinc-400'}">${inverterTotal.toFixed(2)} m</span>
+              <span class="text-[9px] text-zinc-500 uppercase font-semibold block tracking-wider">Suma Zużycia AC</span>
+              <span class="text-base font-extrabold ${textClass}">${trafoSum.toFixed(2)} m</span>
               ${firstTeam ? `<span class="text-[8px] block text-zinc-500 font-bold tracking-tight mt-1 truncate">Zapis: ${firstTeam}</span>` : ''}
             </div>
           `;
           invertersContainer.appendChild(button);
-        }
-      });
+        });
+      }
     }
 
     function filterTrafos(filter) {
@@ -581,12 +750,34 @@
       renderInverterSelection();
     }
 
+    function createEmptyRecord(label, defaultLength) {
+      return {
+        ID: generateUUID(),
+        Data_Wpisu: new Date().toISOString(),
+        Team: state.selectedTeam,
+        Trafostacja: state.activeTrafo ? state.activeTrafo.replace("Trafo ", "") : "1",
+        Falownik_WR: state.selectedInverter || "",
+        Numer_Bębna_Stringu: label,
+        Dlugosc_Bebna: defaultLength,
+        Odczyt_Start: 0,
+        Odczyt_Koniec: 0,
+        Zuzycie: 0,
+        Zapas: 0,
+        Typ_Kabla: state.selectedCableType,
+        Zakonczono: state.isCompleted,
+        isEdited: false // Śledzi czy wiersz był modyfikowany/dodany (ważne dla samych zer!)
+      };
+    }
+
     function selectInverter(inverterName, trafoName) {
       state.selectedInverter = inverterName;
       state.activeTrafo = trafoName;
 
-      const existing = state.meters.filter(m => m.Falownik_WR === inverterName);
+      const existing = state.meters.filter(m => m.Falownik_WR === inverterName && getCableType(m) === "DC");
       state.localEntries = [];
+      state.editMode = false;
+
+      state.isCompleted = isInverterCompleted(inverterName, "DC");
 
       if (state.config.workMode === "Bębny") {
         if (existing.length > 0) {
@@ -601,20 +792,21 @@
             Odczyt_Start: parseFloat(e.Odczyt_Start) || 0,
             Odczyt_Koniec: parseFloat(e.Odczyt_Koniec) || 0,
             Zuzycie: parseFloat(e.Zuzycie) || 0,
-            Zapas: parseFloat(e.Zapas) || 0
+            Zapas: parseFloat(e.Zapas) || 0,
+            Typ_Kabla: "DC",
+            Zakonczono: e.Zakonczono === true || e.Zakonczono === "true" || e.Zakonczono === 1 || e.Zakonczono === "1",
+            isEdited: true // Jest w bazie, więc na pewno chcemy zachować
           }));
         } else {
           state.localEntries.push(createEmptyRecord("Bęben #1", 500));
         }
       } else {
-        // TRYB STRINGÓW - Zawsze generuj pełną pulę stringów z konfiguracji
         const strCount = state.config.stringsCount || 12;
         for (let s = 1; s <= strCount; s++) {
           const label = `String #${s}`;
           const found = existing.find(e => e.Numer_Bębna_Stringu === label);
           
           if (found) {
-            // Istniejący zapis w bazie danych (ładujemy go)
             state.localEntries.push({
               ID: found.ID,
               Data_Wpisu: found.Data_Wpisu,
@@ -626,14 +818,16 @@
               Odczyt_Start: parseFloat(found.Odczyt_Start) || 0,
               Odczyt_Koniec: parseFloat(found.Odczyt_Koniec) || 0,
               Zuzycie: parseFloat(found.Zuzycie) || 0,
-              Zapas: parseFloat(found.Zapas) || 0
+              Zapas: parseFloat(found.Zapas) || 0,
+              Typ_Kabla: "DC",
+              Zakonczono: found.Zakonczono === true || found.Zakonczono === "true" || found.Zakonczono === 1 || found.Zakonczono === "1",
+              isEdited: true
             });
           } else {
-            // Brak zapisu - pusta karta gotowa do edycji
             state.localEntries.push({
               ID: generateUUID(),
               Data_Wpisu: new Date().toISOString(),
-              Team: "", // Pusty team, zostanie nadany dopiero przy edycji
+              Team: "", 
               Trafostacja: state.activeTrafo.replace("Trafo ", ""),
               Falownik_WR: state.selectedInverter,
               Numer_Bębna_Stringu: label,
@@ -641,7 +835,10 @@
               Odczyt_Start: 0,
               Odczyt_Koniec: 0,
               Zuzycie: 0,
-              Zapas: 0
+              Zapas: 0,
+              Typ_Kabla: "DC",
+              Zakonczono: state.isCompleted,
+              isEdited: false
             });
           }
         }
@@ -651,115 +848,267 @@
       renderApp();
     }
 
-    function createEmptyRecord(label, defaultLength) {
-      return {
-        ID: generateUUID(),
-        Data_Wpisu: new Date().toISOString(),
-        Team: state.selectedTeam,
-        Trafostacja: state.activeTrafo.replace("Trafo ", ""),
-        Falownik_WR: state.selectedInverter,
-        Numer_Bębna_Stringu: label,
-        Dlugosc_Bebna: defaultLength,
-        Odczyt_Start: 0,
-        Odczyt_Koniec: 0,
-        Zuzycie: 0,
-        Zapas: 0
-      };
+    function selectTrafoAC(trafoName) {
+      state.selectedTrafo = trafoName;
+      state.editMode = false;
+      
+      const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "") || "1";
+      const wrCount = state.config.trafos[trafoName] || 12;
+
+      const existing = state.meters.filter(m => getCableType(m) === "AC" && String(m.Trafostacja) === cleanTrafoNum);
+      state.localEntries = [];
+
+      state.isCompleted = isTrafoCompletedAC(trafoName);
+
+      for (let j = 1; j <= wrCount; j++) {
+        const inverterName = `WR ${cleanTrafoNum}.${j}`;
+        const found = existing.find(e => e.Falownik_WR === inverterName);
+
+        if (found) {
+          state.localEntries.push({
+            ID: found.ID,
+            Data_Wpisu: found.Data_Wpisu,
+            Team: found.Team,
+            Trafostacja: found.Trafostacja,
+            Falownik_WR: found.Falownik_WR,
+            Numer_Bębna_Stringu: found.Numer_Bębna_Stringu || "Kabel AC",
+            Dlugosc_Bebna: 0,
+            Odczyt_Start: parseFloat(found.Odczyt_Start) || 0,
+            Odczyt_Koniec: parseFloat(found.Odczyt_Koniec) || 0,
+            Zuzycie: parseFloat(found.Zuzycie) || 0,
+            Zapas: 0,
+            Typ_Kabla: "AC",
+            Zakonczono: found.Zakonczono === true || found.Zakonczono === "true" || found.Zakonczono === 1 || found.Zakonczono === "1",
+            isEdited: true
+          });
+        } else {
+          state.localEntries.push({
+            ID: generateUUID(),
+            Data_Wpisu: new Date().toISOString(),
+            Team: "",
+            Trafostacja: cleanTrafoNum,
+            Falownik_WR: inverterName,
+            Numer_Bębna_Stringu: "Kabel AC",
+            Dlugosc_Bebna: 0,
+            Odczyt_Start: 0,
+            Odczyt_Koniec: 0,
+            Zuzycie: 0,
+            Zapas: 0,
+            Typ_Kabla: "AC",
+            Zakonczono: state.isCompleted,
+            isEdited: false
+          });
+        }
+      }
+
+      state.hasUnsavedChanges = false;
+      renderApp();
     }
 
-    // KROK 3: WIDOK MONTERA I FORMULARZ
-    function renderMonterForm() {
-      document.getElementById('active-inverter-badge').innerText = state.selectedInverter;
+    function toggleCompletionStatus() {
+      state.isCompleted = !state.isCompleted;
+      state.hasUnsavedChanges = true;
       
+      state.localEntries.forEach(entry => {
+        entry.Zakonczono = state.isCompleted;
+        entry.isEdited = true; // Zaznaczamy wiersze na wymuszenie wysłania
+      });
+      
+      updateToggleUI();
+      showStatusMessage(state.isCompleted ? "Oznaczono obiekt jako zakończony (Zapisze się po wysłaniu do chmury)." : "Oznaczono obiekt jako w trakcie prac.", "success");
+    }
+
+    function updateToggleUI() {
+      const toggleBtn = document.getElementById('toggle-completion');
+      const toggleDot = document.getElementById('toggle-completion-dot');
+      if (!toggleBtn || !toggleDot) return;
+
+      if (state.isCompleted) {
+        toggleBtn.className = "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-emerald-500/20 border-emerald-500/30";
+        toggleDot.className = "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-emerald-500 shadow-lg ring-0 transition duration-200 ease-in-out translate-x-0";
+        toggleBtn.setAttribute('aria-checked', 'true');
+      } else {
+        toggleBtn.className = "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-amber-500/10 border-amber-500/30";
+        toggleDot.className = "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-amber-500 shadow-lg ring-0 transition duration-200 ease-in-out translate-x-5";
+        toggleBtn.setAttribute('aria-checked', 'false');
+      }
+    }
+
+    function toggleEditMode() {
+      state.editMode = !state.editMode;
+      renderMonterForm();
+      if (state.editMode) {
+        showStatusMessage("Uruchomiono tryb zamiany pozycji wierszy.", "success");
+      }
+    }
+
+    function swapRecords(idx1, idx2) {
+      if (idx1 < 0 || idx1 >= state.localEntries.length || idx2 < 0 || idx2 >= state.localEntries.length) return;
+      
+      const item1 = state.localEntries[idx1];
+      const item2 = state.localEntries[idx2];
+      
+      if (state.selectedCableType === "DC") {
+        const label1 = item1.Numer_Bębna_Stringu;
+        const label2 = item2.Numer_Bębna_Stringu;
+        
+        state.localEntries[idx1] = item2;
+        state.localEntries[idx2] = item1;
+        
+        state.localEntries[idx1].Numer_Bębna_Stringu = label1;
+        state.localEntries[idx2].Numer_Bębna_Stringu = label2;
+      } else {
+        const label1 = item1.Falownik_WR;
+        const label2 = item2.Falownik_WR;
+        
+        state.localEntries[idx1] = item2;
+        state.localEntries[idx2] = item1;
+        
+        state.localEntries[idx1].Falownik_WR = label1;
+        state.localEntries[idx2].Falownik_WR = label2;
+      }
+      
+      state.localEntries[idx1].isEdited = true;
+      state.localEntries[idx2].isEdited = true;
+      state.hasUnsavedChanges = true;
+      renderMonterForm();
+    }
+
+    function renderMonterForm() {
       const activeTeamBadge = document.getElementById('active-team-badge');
       if (activeTeamBadge) {
-        activeTeamBadge.innerText = state.selectedTeam;
+        activeTeamBadge.innerText = state.selectedTeam.replace("Team ", "T");
       }
 
-      // Sprawdzenie innych zespołów, które mają wprowadzone zużycie
-      const otherTeams = [...new Set(state.localEntries
-        .filter(entry => entry.Team && entry.Team !== state.selectedTeam && entry.Zuzycie > 0)
-        .map(entry => entry.Team)
-      )];
-
-      const collaborationWarning = document.getElementById('collaboration-warning-badge');
-      const otherTeamsNames = document.getElementById('other-teams-names');
-
-      if (otherTeams.length > 0) {
-        collaborationWarning.classList.remove('hidden');
-        otherTeamsNames.innerText = otherTeams.join(", ");
-      } else {
-        collaborationWarning.classList.add('hidden');
+      const activeInverterBadge = document.getElementById('active-inverter-badge');
+      if (activeInverterBadge) {
+        if (state.selectedCableType === "DC") {
+          activeInverterBadge.innerText = state.selectedInverter;
+        } else {
+          activeInverterBadge.innerText = state.selectedTrafo.replace("Trafo ", "TS ");
+        }
       }
+
+      const isDrumMode = (state.selectedCableType === "DC" && state.config.workMode === "Bębny");
+
+      const topDrumsCounter = document.getElementById('top-drums-counter');
+      if (topDrumsCounter) {
+        if (state.selectedCableType === "DC") {
+          if (isDrumMode) {
+            topDrumsCounter.innerText = `B:${state.localEntries.length}`;
+          } else {
+            topDrumsCounter.innerText = `S:${state.localEntries.length}`;
+          }
+        } else {
+          topDrumsCounter.innerText = `F:${state.localEntries.length}`;
+        }
+        topDrumsCounter.classList.remove('hidden');
+      }
+
+      updateToggleUI();
 
       const recordsContainer = document.getElementById('records-list');
       recordsContainer.innerHTML = "";
-
-      const btnAddRow = document.getElementById('btn-add-row');
-      const modeTitle = document.getElementById('form-mode-title');
-      const rowsCounter = document.getElementById('total-rows-counter');
-
-      if (state.config.workMode === "Bębny") {
-        modeTitle.innerText = "Tryb Bębnów";
-        rowsCounter.innerText = `Bębnów: ${state.localEntries.length}`;
-        if (btnAddRow) btnAddRow.style.display = "flex";
-      } else {
-        modeTitle.innerText = "Tryb Stringów";
-        rowsCounter.innerText = `Stringów: ${state.localEntries.length}`;
-        if (btnAddRow) btnAddRow.style.display = "none";
-      }
 
       state.localEntries.forEach((entry, index) => {
         const itemRow = document.createElement('div');
         itemRow.id = `record-row-${index}`;
         
-        const hasConsumption = entry.Zuzycie > 0;
+        const hasActiveData = (entry.isEdited || entry.Zuzycie > 0 || entry.Odczyt_Start > 0 || entry.Odczyt_Koniec > 0);
         const isMyTeam = (!entry.Team || entry.Team === state.selectedTeam);
 
         let borderClass = "";
         let headerHTML = "";
+        
+        const rowLabel = state.selectedCableType === "DC" ? entry.Numer_Bębna_Stringu : entry.Falownik_WR;
 
-        if (!hasConsumption) {
+        const editBtnHTML = `
+          <button type="button" onclick="toggleEditMode()" class="w-7 h-7 bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-amber-400 rounded-lg flex items-center justify-center transition-all ${state.editMode ? 'bg-amber-500/25 border-amber-500 text-amber-400 shadow-amber-glow animate-pulse' : ''}" title="Tryb edycji kolejności">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+            </svg>
+          </button>
+        `;
+
+        const plusBtnHTML = isDrumMode ? `
+          <button type="button" onclick="addNewRecordRow()" class="w-7 h-7 bg-zinc-950 border border-zinc-800 text-emerald-400 hover:text-emerald-300 font-extrabold text-sm rounded-lg flex items-center justify-center transition-all" title="Dodaj bęben">
+            +
+          </button>
+        ` : '';
+
+        const headerButtonsHTML = `
+          <div class="flex items-center gap-1.5 ml-2">
+            ${plusBtnHTML}
+            ${editBtnHTML}
+          </div>
+        `;
+
+        if (state.editMode) {
+          borderClass = "border-amber-500/80 bg-amber-950/15 hover:border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.15)] border-dashed";
+          headerHTML = `
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-black text-xs text-amber-400 uppercase tracking-wide">${rowLabel}</span>
+              ${headerButtonsHTML}
+              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold">Tryb Zamiany</span>
+            </div>
+          `;
+        } else if (!hasActiveData) {
           borderClass = "border-zinc-800/80 bg-zinc-950/40 hover:border-zinc-700";
           headerHTML = `
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-xs text-zinc-300 uppercase">${entry.Numer_Bębna_Stringu}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-xs text-zinc-300 uppercase">${rowLabel}</span>
+              ${headerButtonsHTML}
             </div>
           `;
         } else if (isMyTeam) {
           borderClass = "border-emerald-500/30 bg-zinc-950 hover:border-emerald-500/50";
           headerHTML = `
-            <div class="flex items-center gap-2">
-              <span class="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">${entry.Numer_Bębna_Stringu}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">${rowLabel}</span>
+              ${headerButtonsHTML}
               <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[9px] font-bold">Mój zespół</span>
             </div>
           `;
         } else {
           borderClass = "border-amber-500/40 bg-amber-950/10 hover:border-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.1)]";
           headerHTML = `
-            <div class="flex items-center gap-2">
-              <span class="font-extrabold text-xs text-amber-400 tracking-wider uppercase">${entry.Numer_Bębna_Stringu}</span>
-              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold">Zapis: ${entry.Team}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-extrabold text-xs text-amber-400 tracking-wider uppercase">${rowLabel}</span>
+              ${headerButtonsHTML}
+              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-emerald-500/20 rounded-md text-[9px] font-bold">Zapis: ${entry.Team}</span>
             </div>
           `;
         }
 
         itemRow.className = `p-3.5 border rounded-xl space-y-3 relative transition-all ${borderClass}`;
 
-        // Zmiana: wywołanie askRemoveRecordRow(index) zamiast bezpośredniego usuwania
-        const deleteButtonHTML = (state.config.workMode === "Bębny" && state.localEntries.length > 1) 
-          ? `<button type="button" onclick="askRemoveRecordRow(${index})" class="touch-target text-zinc-500 hover:text-red-400 transition-colors">
+        let controlSectionHTML = "";
+        if (state.editMode) {
+          controlSectionHTML = `
+            <div class="flex items-center space-x-1">
+              <button type="button" onclick="swapRecords(${index}, ${index - 1})" class="touch-target w-8 h-8 bg-zinc-950 hover:bg-zinc-800 text-amber-400 border border-zinc-800 rounded-lg flex items-center justify-center transition-all ${index === 0 ? 'opacity-25 pointer-events-none' : ''}">
+                ▲
+              </button>
+              <button type="button" onclick="swapRecords(${index}, ${index + 1})" class="touch-target w-8 h-8 bg-zinc-950 hover:bg-zinc-800 text-amber-400 border border-zinc-800 rounded-lg flex items-center justify-center transition-all ${index === state.localEntries.length - 1 ? 'opacity-25 pointer-events-none' : ''}">
+                ▼
+              </button>
+            </div>
+          `;
+        } else if (isDrumMode && state.localEntries.length > 1) {
+          controlSectionHTML = `
+            <button type="button" onclick="askRemoveRecordRow(${index})" class="touch-target text-zinc-500 hover:text-red-400 transition-colors">
                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-             </button>`
-          : ``;
+             </button>
+          `;
+        }
 
-        if (state.config.workMode === "Bębny") {
+        if (state.selectedCableType === "DC" && state.config.workMode === "Bębny") {
           itemRow.innerHTML = `
             <div class="flex justify-between items-center pb-2 border-b border-zinc-900" id="record-header-${index}">
               ${headerHTML}
-            </div>
-            <div class="absolute right-3.5 top-3">
-              ${deleteButtonHTML}
+              <div class="flex items-center space-x-1">
+                ${controlSectionHTML}
+              </div>
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div>
@@ -787,10 +1136,13 @@
             </div>
           `;
         } else {
-          // Tryb Stringi
+          const consumptionLabel = state.selectedCableType === "DC" ? "Zużycie stringu:" : "Zużycie AC:";
           itemRow.innerHTML = `
             <div class="flex items-center justify-between pb-1 border-b border-zinc-900/60 mb-2" id="record-header-${index}">
               ${headerHTML}
+              <div class="flex items-center space-x-1">
+                ${controlSectionHTML}
+              </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
@@ -803,7 +1155,7 @@
               </div>
             </div>
             <div class="pt-1.5 border-t border-zinc-900/40 text-right">
-              <span class="text-[10px] text-zinc-500">Zużycie stringu:</span>
+              <span class="text-[10px] text-zinc-500">${consumptionLabel}</span>
               <span id="zuzycie-label-${index}" class="text-xs font-black text-emerald-400 ml-1">${entry.Zuzycie.toFixed(2)} m</span>
             </div>
           `;
@@ -813,28 +1165,31 @@
       });
     }
 
-    // Dynamiczne przeliczanie wartości w czasie rzeczywistym bezpośrednio w DOM
     function updateRecordField(index, fieldName, value) {
       const record = state.localEntries[index];
-      
-      if (fieldName === 'Numer_Bębna_Stringu') {
+      if (fieldName === 'Numer_Bębna_Stringu' || fieldName === 'Falownik_WR') {
         record[fieldName] = value;
       } else {
         record[fieldName] = parseFloat(value) || 0;
       }
 
-      record.Zuzycie = Math.abs(record.Odczyt_Start - record.Odczyt_Koniec);
+      record.Zakonczono = state.isCompleted;
+      record.isEdited = true; // Flaga oznaczająca, że wpis został celowo zmodyfikowany
 
-      // Jeżeli monter wpisuje nową wartość, automatycznie przypisz do jego zespołu
+      if (record.Odczyt_Koniec > 0) {
+        record.Zuzycie = Math.abs(record.Odczyt_Start - record.Odczyt_Koniec);
+      } else {
+        record.Zuzycie = 0;
+      }
+
       if (fieldName === 'Odczyt_Start' || fieldName === 'Odczyt_Koniec' || fieldName === 'Dlugosc_Bebna') {
         record.Team = state.selectedTeam;
       }
 
-      if (state.config.workMode === "Bębny") {
-        if (record.Dlugosc_Bebna === 0) {
-          record.Zapas = 0; 
-        } else {
-          record.Zapas = record.Dlugosc_Bebna - record.Zuzycie;
+      if (state.selectedCableType === "DC" && state.config.workMode === "Bębny") {
+        record.Zapas = record.Dlugosc_Bebna === 0 ? 0 : record.Dlugosc_Bebna - record.Zuzycie;
+        if (record.Zapas < 0) {
+          record.Zapas = 0;
         }
       } else {
         record.Dlugosc_Bebna = 0;
@@ -843,14 +1198,6 @@
 
       state.hasUnsavedChanges = true;
 
-      // Natychmiastowe uaktualnienie całkowitej sumy w locie (jeżeli element istnieje)
-      const liveSum = calculateInverterLiveTotal();
-      const liveTotalEl = document.getElementById('inverter-live-total');
-      if (liveTotalEl) {
-        liveTotalEl.innerText = `${liveSum.toFixed(2)} m`;
-      }
-
-      // Aktualizacja wartości zużycia i zapasu bez utraty zaznaczenia
       const zuzycieLabel = document.getElementById(`zuzycie-label-${index}`);
       if (zuzycieLabel) {
         zuzycieLabel.innerText = `${record.Zuzycie.toFixed(2)} m`;
@@ -861,25 +1208,58 @@
         zapasLabel.innerText = `${record.Zapas.toFixed(2)} m`;
       }
 
-      // Dynamiczna zmiana klas CSS w locie na podstawie nowo wprowadzonego zużycia
       const rowElement = document.getElementById(`record-row-${index}`);
       const headerElement = document.getElementById(`record-header-${index}`);
       if (rowElement && headerElement) {
-        const hasConsumption = record.Zuzycie > 0;
+        const hasActiveData = (record.isEdited || record.Zuzycie > 0 || record.Odczyt_Start > 0 || record.Odczyt_Koniec > 0);
         const isMyTeam = (!record.Team || record.Team === state.selectedTeam);
+        const rowLabel = state.selectedCableType === "DC" ? record.Numer_Bębna_Stringu : record.Falownik_WR;
 
-        if (!hasConsumption) {
+        const editBtnHTML = `
+          <button type="button" onclick="toggleEditMode()" class="w-7 h-7 bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-amber-400 rounded-lg flex items-center justify-center transition-all ${state.editMode ? 'bg-amber-500/25 border-amber-500 text-amber-400 shadow-amber-glow animate-pulse' : ''}" title="Tryb edycji kolejności">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+            </svg>
+          </button>
+        `;
+
+        const isDrumMode = (state.selectedCableType === "DC" && state.config.workMode === "Bębny");
+        const plusBtnHTML = isDrumMode ? `
+          <button type="button" onclick="addNewRecordRow()" class="w-7 h-7 bg-zinc-950 border border-zinc-800 text-emerald-400 hover:text-emerald-300 font-extrabold text-sm rounded-lg flex items-center justify-center transition-all" title="Dodaj bęben">
+            +
+          </button>
+        ` : '';
+
+        const headerButtonsHTML = `
+          <div class="flex items-center gap-1.5 ml-2">
+            ${plusBtnHTML}
+            ${editBtnHTML}
+          </div>
+        `;
+
+        if (state.editMode) {
+          rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-amber-500/80 bg-amber-950/15 hover:border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.15)] border-dashed";
+          headerElement.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="font-black text-xs text-amber-400 uppercase tracking-wide">${rowLabel}</span>
+              ${headerButtonsHTML}
+              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold">Tryb Zamiany</span>
+            </div>
+          `;
+        } else if (!hasActiveData) {
           rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-zinc-800/80 bg-zinc-950/40 hover:border-zinc-700";
           headerElement.innerHTML = `
             <div class="flex items-center gap-2">
-              <span class="font-bold text-xs text-zinc-300 uppercase">${record.Numer_Bębna_Stringu}</span>
+              <span class="font-bold text-xs text-zinc-300 uppercase">${rowLabel}</span>
+              ${headerButtonsHTML}
             </div>
           `;
         } else if (isMyTeam) {
           rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-emerald-500/30 bg-zinc-950 hover:border-emerald-500/50";
           headerElement.innerHTML = `
             <div class="flex items-center gap-2">
-              <span class="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">${record.Numer_Bębna_Stringu}</span>
+              <span class="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">${rowLabel}</span>
+              ${headerButtonsHTML}
               <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[9px] font-bold">Mój zespół</span>
             </div>
           `;
@@ -887,8 +1267,9 @@
           rowElement.className = "p-3.5 border rounded-xl space-y-3 relative transition-all border-amber-500/40 bg-amber-950/10 hover:border-amber-500/60 shadow-[0_0_10px_rgba(245,158,11,0.1)]";
           headerElement.innerHTML = `
             <div class="flex items-center gap-2">
-              <span class="font-extrabold text-xs text-amber-400 tracking-wider uppercase">${record.Numer_Bębna_Stringu}</span>
-              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-bold">Zapis: ${record.Team}</span>
+              <span class="font-extrabold text-xs text-amber-400 tracking-wider uppercase">${rowLabel}</span>
+              ${headerButtonsHTML}
+              <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-emerald-500/20 rounded-md text-[9px] font-bold">Zapis: ${record.Team}</span>
             </div>
           `;
         }
@@ -897,12 +1278,13 @@
 
     function addNewRecordRow() {
       const nextNum = state.localEntries.length + 1;
-      state.localEntries.push(createEmptyRecord(`Bęben #${nextNum}`, 500));
+      const newRecord = createEmptyRecord(`Bęben #${nextNum}`, 500);
+      newRecord.isEdited = true; // Zaznaczamy flagę dla nowo dodanego bębna, aby upewnić się, że zapisze się w bazie.
+      state.localEntries.push(newRecord);
       state.hasUnsavedChanges = true;
       renderMonterForm();
     }
 
-    // Wyświetlenie modalu potwierdzenia przed realnym usunięciem wiersza
     function askRemoveRecordRow(index) {
       pendingDeleteIndex = index;
       const entry = state.localEntries[index];
@@ -913,7 +1295,6 @@
       document.getElementById('delete-confirm-modal').classList.remove('hidden');
     }
 
-    // Potwierdzenie usunięcia z modalu
     function confirmDeleteRecordRow() {
       if (pendingDeleteIndex !== null) {
         removeRecordRow(pendingDeleteIndex);
@@ -922,7 +1303,6 @@
       closeDeleteModal();
     }
 
-    // Zamknięcie modalu potwierdzenia usunięcia
     function closeDeleteModal() {
       document.getElementById('delete-confirm-modal').classList.add('hidden');
     }
@@ -931,14 +1311,19 @@
       if (state.localEntries.length <= 1) return;
 
       state.localEntries.splice(index, 1);
+      
+      state.localEntries.forEach((entry, idx) => {
+        entry.Numer_Bębna_Stringu = `Bęben #${idx + 1}`;
+      });
+
       state.hasUnsavedChanges = true;
       renderMonterForm();
     }
 
-    // POWRÓT DO KROKU 1
     function goBackToStep1() {
       state.selectedTeam = "";
       state.selectedInverter = "";
+      state.selectedTrafo = "";
       renderApp();
     }
 
@@ -947,44 +1332,41 @@
         openWarningModal();
       } else {
         state.selectedInverter = "";
+        state.selectedTrafo = "";
         renderApp();
       }
     }
 
-    // AGREGACJE MATEMATYCZNE
-    function calculateGrandTotal() {
-      return state.meters.reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
-    }
-
-    function calculateTeamTotal(teamName) {
+    function calculateGrandTotal(cableType = state.selectedCableType) {
       return state.meters
-        .filter(entry => entry.Team === teamName)
+        .filter(entry => getCableType(entry) === cableType)
         .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
 
-    function calculateTrafoTotal(trafoName) {
+    function calculateTeamTotal(teamName, cableType = state.selectedCableType) {
+      return state.meters
+        .filter(entry => entry.Team === teamName && getCableType(entry) === cableType)
+        .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
+    }
+
+    function calculateTrafoTotal(trafoName, cableType = state.selectedCableType) {
       const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "");
       return state.meters
         .filter(entry => {
           const entryTrafo = String(entry.Trafostacja).replace(/[^0-9]/g, "");
-          return entryTrafo === cleanTrafoNum;
+          return entryTrafo === cleanTrafoNum && getCableType(entry) === cableType;
         })
         .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
 
-    function calculateInverterTotal(inverterName) {
+    function calculateInverterTotal(inverterName, cableType = state.selectedCableType) {
       return state.meters
-        .filter(entry => entry.Falownik_WR === inverterName)
+        .filter(entry => entry.Falownik_WR === inverterName && getCableType(entry) === cableType)
         .reduce((acc, entry) => acc + (parseFloat(entry.Zuzycie) || 0), 0);
     }
 
-    function calculateInverterLiveTotal() {
-      return state.localEntries.reduce((acc, entry) => acc + (entry.Zuzycie || 0), 0);
-    }
-
-    function getInverterTeamOwner(inverterName) {
-      // Pobieraj tylko te ekipy, które mają realne zużycie kabla > 0
-      const records = state.meters.filter(m => m.Falownik_WR === inverterName && (parseFloat(m.Zuzycie) || 0) > 0);
+    function getInverterTeamOwner(inverterName, cableType = state.selectedCableType) {
+      const records = state.meters.filter(m => m.Falownik_WR === inverterName && getCableType(m) === cableType && (parseFloat(m.Zuzycie) || 0) > 0);
       if (records.length > 0) {
         const teams = [...new Set(records.map(r => r.Team))];
         return teams.join(", ");
@@ -992,7 +1374,16 @@
       return null;
     }
 
-    // KOMUNIKACJA Z BACKENDEM GOOGLE APPS SCRIPT
+    function getTrafoTeamOwnerAC(trafoName) {
+      const cleanTrafoNum = trafoName.replace(/[^0-9]/g, "");
+      const records = state.meters.filter(m => getCableType(m) === "AC" && String(m.Trafostacja) === cleanTrafoNum && (parseFloat(m.Zuzycie) || 0) > 0);
+      if (records.length > 0) {
+        const teams = [...new Set(records.map(r => r.Team))];
+        return teams.join(", ");
+      }
+      return null;
+    }
+
     function showLoading(show, message = "Trwa synchronizacja danych...") {
       const overlay = document.getElementById('loading-overlay');
       const text = document.getElementById('loading-text');
@@ -1043,18 +1434,28 @@
 
       const payloadDate = new Date().toLocaleString("pl-PL");
       
-      // FILTRACJA: Przesyłamy tylko te rekordy, które mają Zużycie > 0
-      const activeEntries = state.localEntries.filter(e => (parseFloat(e.Zuzycie) || 0) > 0);
+      // ZAKTUALIZOWANA LOGIKA FILTROWANIA - uwzględnia pole isEdited
+      const activeEntries = state.localEntries.filter(e => 
+        e.isEdited || 
+        (parseFloat(e.Zuzycie) || 0) > 0 || 
+        (parseFloat(e.Odczyt_Start) || 0) > 0 || 
+        (parseFloat(e.Odczyt_Koniec) || 0) > 0
+      );
 
       const mappedPayload = activeEntries.map(e => ({
         ...e,
         Team: e.Team || state.selectedTeam,
-        Data_Wpisu: payloadDate
+        Data_Wpisu: payloadDate,
+        Typ_Kabla: state.selectedCableType,
+        Zakonczono: state.isCompleted
       }));
 
       const body = {
         action: "saveMeters",
-        selectedInverter: state.selectedInverter,
+        cableType: state.selectedCableType,
+        selectedTrafo: state.selectedCableType === "AC" ? state.selectedTrafo : state.activeTrafo,
+        selectedInverter: state.selectedCableType === "AC" ? "" : state.selectedInverter,
+        isCompleted: state.isCompleted ? 1 : 0,
         data: mappedPayload
       };
 
@@ -1068,12 +1469,20 @@
       })
       .then(() => {
         state.hasUnsavedChanges = false;
-        // Aktualizacja lokalnego cache'u: usuwamy stare wpisy z tego falownika i dodajemy nowe
-        state.meters = state.meters.filter(m => m.Falownik_WR !== state.selectedInverter);
+        state.editMode = false;
+        
+        if (state.selectedCableType === "DC") {
+          state.meters = state.meters.filter(m => !(m.Falownik_WR === state.selectedInverter && getCableType(m) === "DC"));
+        } else {
+          const cleanTrafoNum = state.selectedTrafo.replace(/[^0-9]/g, "");
+          state.meters = state.meters.filter(m => !(String(m.Trafostacja) === cleanTrafoNum && getCableType(m) === "AC"));
+        }
+        
         state.meters = state.meters.concat(mappedPayload);
 
         showLoading(false);
         state.selectedInverter = "";
+        state.selectedTrafo = "";
         renderApp();
         showStatusMessage("Pomiary przesłane pomyślnie!", "success");
       })
@@ -1106,8 +1515,10 @@
         closeSettingsModal();
         state.selectedTeam = "";
         state.selectedInverter = "";
+        state.selectedTrafo = "";
         state.meters = [];
         state.hasUnsavedChanges = false;
+        state.editMode = false;
         fetchData();
         showStatusMessage("Wyczyszczono bazę i przywrócono stan fabryczny!", "success");
       })
@@ -1118,7 +1529,6 @@
       });
     }
 
-    // OBSŁUGA MODALI I USTAWIEŃ
     function openSettingsModal() {
       document.getElementById('input-api-url').value = state.apiUrl;
       document.getElementById('settings-msg').className = "hidden text-[11px] p-2 rounded-lg";
@@ -1176,7 +1586,6 @@
       }, 4000);
     }
 
-    // Modal warnings controls
     function openWarningModal() {
       document.getElementById('custom-warning-modal').classList.remove('hidden');
     }
@@ -1188,11 +1597,12 @@
     function confirmAbandonChanges() {
       closeWarningModal();
       state.hasUnsavedChanges = false;
+      state.editMode = false;
       state.selectedInverter = "";
+      state.selectedTrafo = "";
       renderApp();
     }
 
-    // Generator UUID
     function generateUUID() {
       return 'rec-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
